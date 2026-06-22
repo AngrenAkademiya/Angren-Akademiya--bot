@@ -11,7 +11,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import CommandStart
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-API_TOKEN = os.getenv("BOT_TOKEN")
+API_TOKEN = os.getenv("BOT_TOKEN" , "8583687270:AAFtlxuVDGnAsr_gWpPlc22nNcr4NEdD4Qg")
 ADMIN_ID = 1243066883
 EXCEL_FILE = "angren_akademiya.xlsx"
 DB_FILE = "bot_data.db"
@@ -275,5 +275,5 @@ async def main():
     await dp.start_polling(bot)
 
 
-if name == "main":
+if __name__ == "__main__":
     asyncio.run(main())
