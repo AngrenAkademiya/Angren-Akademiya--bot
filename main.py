@@ -1,319 +1,233 @@
+import os
 import asyncio
 import logging
-import openpyxl
-import os
-import sqlite3
 from datetime import datetime
-from aiogram import Bot, Dispatcher, types, F
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram import Bot, Dispatcher, types
+from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.filters import CommandStart
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
-API_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = 1243066883
-EXCEL_FILE = "angren_akademiya.xlsx"
-DB_FILE = "bot_data.db"
-
+# Loglarni sozlash
 logging.basicConfig(level=logging.INFO)
+
+# Tokenni Render muhitidan o'qib olish
+API_TOKEN = os.getenv("BOT_TOKEN")
+
+if not API_TOKEN:
+    raise ValueError("Xatolik: BOT_TOKEN topilmadi! Render sozlamalaridan uni tekshiring.")
+
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
+# --- RO'YXATDAN O'TISH HOLATLARI (FSM) ---
+class Registration(StatesGroup):
+    name = State()         # Ism kutish
+    phone = State()        # Telefon kutish
+    filial = State()       # Filial kutish
+    subjects = State()     # Fanlarni tanlash
+    time_pref = State()    # O'qish vaqtini tanlash
 
+# Markazingiz ma'lumotlari
+AVAILABLE_FILIALS = ["Angren shahar", "Do'stlik Shaxarchasi", "Yangiobod"]
+AVAILABLE_SUBJECTS = ["Kimyo", "Biologiya", "Matematika", "Fizika", "Ona tili", "Ingliz tili"]
+AVAILABLE_TIMES = ["Ettalabgi", "Kunduzgi", "Kechki"]
+
+# --- MA'LUMOTLAR BAZASI VA EXCEL BILAN ISHLASH ---
 def init_db():
-    conn = sqlite3.connect(DB_FILE)
+    import sqlite3
+    conn = sqlite3.connect("bot_data.db")
     cursor = conn.cursor()
-    cursor.execute('''
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT, phone TEXT, filial TEXT,
-            courses TEXT, vaqt TEXT, sana TEXT, soat TEXT
+            telegram_id INTEGER PRIMARY KEY,
+            full_name TEXT,
+            phone_number TEXT,
+            filial TEXT,
+            subjects TEXT,
+            time_pref TEXT,
+            reg_date TEXT,
+            reg_time TEXT
         )
-    ''')
+    """)
     conn.commit()
     conn.close()
 
+def save_student_data(user_id, name, phone, filial, subjects_list, time_pref):
+    import sqlite3
+    import openpyxl
+    from openpyxl import Workbook
 
-def init_excel():
-    if not os.path.exists(EXCEL_FILE):
-        try:
-            wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = "Royxat"
-            ws.append(["№", "Ism", "Telefon", "Filial", "Kurslar", "Vaqt", "Sana", "Soat"])
-            wb.save(EXCEL_FILE)
-        except Exception as e:
-            logging.error(f"Excel yaratishda xato: {e}")
-
-
-def save_data(name, phone, filial, courses, vaqt):
+    subjects_str = ", ".join(subjects_list)
     now = datetime.now()
-    sana = now.strftime("%d.%m.%Y")
-    soat = now.strftime("%H:%M")
-    courses_str = ", ".join(courses)
+    current_date = now.strftime("%Y-%m-%d")
+    current_time = now.strftime("%H:%M:%S")
 
-    conn = sqlite3.connect(DB_FILE)
+    # 1. SQLite bazaga saqlash
+    conn = sqlite3.connect("bot_data.db")
     cursor = conn.cursor()
-    cursor.execute(
-        "INSERT INTO users (name, phone, filial, courses, vaqt, sana, soat) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (name, phone, filial, courses_str, vaqt, sana, soat)
-    )
+    cursor.execute("""
+        INSERT OR REPLACE INTO users VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (user_id, name, phone, filial, subjects_str, time_pref, current_date, current_time))
     conn.commit()
     conn.close()
 
-    try:
-        wb = openpyxl.load_workbook(EXCEL_FILE)
-        ws = wb.active
-        row_num = ws.max_row
-        ws.append([row_num, name, phone, filial, courses_str, vaqt, sana, soat])
-        wb.save(EXCEL_FILE)
-    except Exception as e:
-        logging.error(f"Excelga yozishda xato: {e}")
+    # 2. Excel faylga saqlash (Siz ko'rsatgan tartibda)
+    file_name = "angren_akademiya.xlsx"
+    if os.path.exists(file_name):
+        wb = openpyxl.load_workbook(file_name)
+        sheet = wb.active
+    else:
+        wb = Workbook()
+        sheet = wb.active
+        sheet.title = "Ro'yxat"
+        sheet.append(["№", "Ism", "Telefon", "Filial", "Kurslar", "Vaqt", "Sana", "Soat"])
+    
+    next_row = sheet.max_row
+    sheet.append([next_row, name, phone, filial, subjects_str, time_pref, current_date, current_time])
+    wb.save(file_name)
+    logging.info(f"Excelga yozildi: {name}")
 
+# --- TUGMALARNI SHAKLLANTIRISH ---
+def get_keyboard(items):
+    builder = ReplyKeyboardBuilder()
+    for item in items:
+        builder.button(text=item)
+    builder.adjust(2)
+    return builder.as_markup(resize_keyboard=True)
 
-class RegState(StatesGroup):
-    waiting_for_name = State()
-    waiting_for_phone = State()
-    waiting_for_filial = State()
-    waiting_for_course = State()
-    waiting_for_time = State()
+def get_subjects_keyboard(selected_subjects):
+    builder = ReplyKeyboardBuilder()
+    for subject in AVAILABLE_SUBJECTS:
+        text = f"✅ {subject}" if subject in selected_subjects else subject
+        builder.button(text=text)
+    builder.button(text="📥 Davom etish (Vaqtni tanlash)")
+    builder.adjust(2)
+    return builder.as_markup(resize_keyboard=True)
 
-
-VALID_COURSES = [
-    "Kimyo va Biologiya",
-    "Ingliz tili IELTS",
-    "IT Sertifikat beriladi",
-    "Matematika",
-    "Prezident maktabiga tayyorlov",
-    "Tarix",
-    "Ona tili",
-    "Huquq",
-    "Koreys tili TOPIK",
-    "Pochemuchka",
-    "Maktabga tayyorlov",
-]
-
-VALID_FILIALS = ["Angren filiali", "Ohangaron filiali"]
-VALID_TIMES = ["Ertalabki guruh", "Kunduzgi guruh", "Kechqurungi guruh"]
-
-
-def get_courses_inline(selected=None):
-    if selected is None:
-        selected = []
-    builder = InlineKeyboardBuilder()
-    for index, course in enumerate(VALID_COURSES):
-        mark = "✅ " if course in selected else ""
-        builder.button(text=f"{mark}{course}", callback_data=f"course_{index}")
-    builder.button(text="✔️ Kurslarni Tasdiqlash", callback_data="confirm_courses")
-    builder.button(text="🔙 Orqaga", callback_data="back_to_filial")
-    builder.adjust(1)
-    return builder.as_markup()
-
-
-def phone_keyboard():
-    return types.ReplyKeyboardMarkup(
-        keyboard=[
-            [types.KeyboardButton(text="📞 Telefon raqamni yuborish", request_contact=True)],
-            [types.KeyboardButton(text="🔙 Orqaga")]
-        ],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
-
-
-def filial_keyboard():
-    return types.ReplyKeyboardMarkup(
-        keyboard=[
-            [types.KeyboardButton(text="Angren filiali")],
-            [types.KeyboardButton(text="Ohangaron filiali")],
-            [types.KeyboardButton(text="🔙 Orqaga")]
-        ],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
-
-
-def time_keyboard():
-    return types.ReplyKeyboardMarkup(
-        keyboard=[
-            [types.KeyboardButton(text="Ertalabki guruh")],
-            [types.KeyboardButton(text="Kunduzgi guruh")],
-            [types.KeyboardButton(text="Kechqurungi guruh")],
-            [types.KeyboardButton(text="🔙 Orqaga")]
-        ],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
-
-
-# --- HANDLERLAR QISMI ---
+# --- BOT HANDLERLARI ---
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
+    await state.clear()
     await message.answer(
-        "Assalomu alaykum! **Angren Akademiya** markazining rasmiy botiga xush kelibsiz.\n\n"
-        "Ro‘yxatdan o‘tish uchun iltimos, **ismingiz va familiyangizni** kiriting:",
-        parse_mode="Markdown"
+        f"Assalomu alaykum, {message.from_user.full_name}!\n"
+        f"**'Angren Akademiya'** ta'lim markazi botiga xush kelibsiz.\n\n"
+        f"Kurslarga ro'yxatdan o'tish uchun **To'liq ism-familiyangizni** kiriting:"
     )
-    await state.set_state(RegState.waiting_for_name)
+    await state.set_state(Registration.name)
 
-
-@dp.message(RegState.waiting_for_name)
+@dp.message(Registration.name)
 async def process_name(message: types.Message, state: FSMContext):
-    if message.text == "🔙 Orqaga":
-        await message.answer("Siz eng birinchi bosqichdasiz. Iltimos, ism-familiyangizni kiriting:")
-        return
-
     await state.update_data(name=message.text)
-    await message.answer(
-        "Rahmat! Endi pastdagi tugma orqali telefon raqamingizni yuboring yoki qo‘lda kiriting (Masalan: +998901234567):",
-        reply_markup=phone_keyboard()
-    )
-    await state.set_state(RegState.waiting_for_phone)
+    await message.answer("Rahmat! Endi **Telefon raqamingizni** kiriting:")
+    await state.set_state(Registration.phone)
 
-
-@dp.message(RegState.waiting_for_phone)
+@dp.message(Registration.phone)
 async def process_phone(message: types.Message, state: FSMContext):
-    if message.text == "🔙 Orqaga":
-        await message.answer("Ism va familiyangizni qaytadan kiriting:", reply_markup=types.ReplyKeyboardRemove())
-        await state.set_state(RegState.waiting_for_name)
-        return
-
-    phone = message.contact.phone_number if message.contact else message.text
-    await state.update_data(phone=phone)
-    
-    await message.answer("O‘zingizga qulay bo‘lgan filialni tanlang:", reply_markup=filial_keyboard())
-    await state.set_state(RegState.waiting_for_filial)
-
-
-@dp.message(RegState.waiting_for_filial)
-async def process_filial(message: types.Message, state: FSMContext):
-    if message.text == "🔙 Orqaga":
-        await message.answer("Telefon raqamingizni qaytadan kiriting yoki yuboring:", reply_markup=phone_keyboard())
-        await state.set_state(RegState.waiting_for_phone)
-        return
-
-    if message.text not in VALID_FILIALS:
-        await message.answer("Iltimos, faqat pastdagi tugmalardan birini tanlang!", reply_markup=filial_keyboard())
-        return
-
-    await state.update_data(filial=message.text)
-    await state.update_data(selected_courses=[])
-    
+    await state.update_data(phone=message.text)
     await message.answer(
-        "Qaysi kurslarda o‘qishni xohlaysiz? Bir nechta variantni tanlashingiz mumkin.\n"
-        "Tanlab bo‘lgach, **'✔️ Kurslarni Tasdiqlash'** tugmasini bosing:",
-        reply_markup=get_courses_inline([]),
-        parse_mode="Markdown"
+        "Iltimos, o'zingizga qulay **Filialni** tanlang:",
+        reply_markup=get_keyboard(AVAILABLE_FILIALS)
     )
-    await state.set_state(RegState.waiting_for_course)
+    await state.set_state(Registration.filial)
 
-
-@dp.callback_query(RegState.waiting_for_course, F.data.startswith("course_"))
-async def process_course_selection(callback: types.CallbackQuery, state: FSMContext):
-    course_index = int(callback.data.split("_")[1])
-    course_name = VALID_COURSES[course_index]
-    
-    user_data = await state.get_data()
-    selected_courses = user_data.get("selected_courses", [])
-    
-    if course_name in selected_courses:
-        selected_courses.remove(course_name)
-    else:
-        selected_courses.append(course_name)
-        
-    await state.update_data(selected_courses=selected_courses)
-    await callback.message.edit_reply_markup(reply_markup=get_courses_inline(selected_courses))
-    await callback.answer()
-
-
-@dp.callback_query(RegState.waiting_for_course, F.data == "back_to_filial")
-async def back_to_filial(callback: types.CallbackQuery, state: FSMContext):
-    await callback.message.delete()
-    await callback.message.answer("Filialni qaytadan tanlang:", reply_markup=filial_keyboard())
-    await state.set_state(RegState.waiting_for_filial)
-    await callback.answer()
-
-
-@dp.callback_query(RegState.waiting_for_course, F.data == "confirm_courses")
-async def confirm_courses(callback: types.CallbackQuery, state: FSMContext):
-    user_data = await state.get_data()
-    selected_courses = user_data.get("selected_courses", [])
-    
-    if not selected_courses:
-        await callback.answer("Iltimos, kamida bitta kursni tanlang!", show_alert=True)
+@dp.message(Registration.filial)
+async def process_filial(message: types.Message, state: FSMContext):
+    if message.text not in AVAILABLE_FILIALS:
+        await message.answer("Iltimos, tugmalardan birini ishlating!")
         return
         
-    await callback.message.delete()
-    await callback.message.answer("Darslar sizga qaysi vaqtda bo‘lishi qulay?", reply_markup=time_keyboard())
-    await state.set_state(RegState.waiting_for_time)
-    await callback.answer()
-
-
-@dp.message(RegState.waiting_for_time)
-async def process_time(message: types.Message, state: FSMContext):
-    if message.text == "🔙 Orqaga":
-        await message.answer(
-            "Kurslarni qaytadan tanlang va tasdiqlang:",
-            reply_markup=get_courses_inline([])
-        )
-        await state.set_state(RegState.waiting_for_course)
-        return
-
-    if message.text not in VALID_TIMES:
-        await message.answer("Iltimos, quyidagi tugmalardan birini tanlang:", reply_markup=time_keyboard())
-        return
-
-    vaqt = message.text
-    data = await state.get_data()
-    name = data.get("name")
-    phone = data.get("phone")
-    filial = data.get("filial")
-    courses = data.get("selected_courses", [])
-
-    save_data(name, phone, filial, courses, vaqt)
-    courses_list = "\n".join([f"- {c}" for c in courses])
-
+    await state.update_data(filial=message.text)
+    await state.update_data(selected_subjects=[])
+    
     await message.answer(
-        f"Hurmatli {name}!\n\n"
-        f"Bizni tanlaganingizdan mamnunmiz.\n"
-        f"Tez orada operatorlarimiz siz bilan boglanishadi!\n\n"
-        f"Yoki biz bilan boglaning:\n"
-        f"+998997925870\n"
-        f"+998931015870\n\n"
-        f"Malumotlaringiz:\n"
-        f"Ism: {name}\n"
-        f"Telefon: {phone}\n"
-        f"Filial: {filial}\n"
-        f"Kurslar:\n{courses_list}\n"
-        f"Vaqt: {vaqt}",
+        "Ajoyib! Endi o'qimoqchi bo'lgan **Kurslarni (fanlarni)** tanlang (ketma-ket bir nechta tanlash mumkin):\n"
+        "Tanlab bo'lgach, pastdagi **'📥 Davom etish (Vaqtni tanlash)'** tugmasini bosing:",
+        reply_markup=get_subjects_keyboard([])
+    )
+    await state.set_state(Registration.subjects)
+
+@dp.message(Registration.subjects)
+async def process_subjects(message: types.Message, state: FSMContext):
+    user_data = await state.get_data()
+    selected_subjects = user_data.get("selected_subjects", [])
+    text = message.text
+
+    if text == "📥 Davom etish (Vaqtni tanlash)":
+        if not selected_subjects:
+            await message.answer("Iltimos, kamida bitta fanni tanlang!")
+            return
+        await message.answer(
+            "O'qish uchun o'zingizga qulay **Vaqtni** belgilang:",
+            reply_markup=get_keyboard(AVAILABLE_TIMES)
+        )
+        await state.set_state(Registration.time_pref)
+        return
+
+    clean_subject = text.replace("✅ ", "")
+    if clean_subject in AVAILABLE_SUBJECTS:
+        if clean_subject in selected_subjects:
+            selected_subjects.remove(clean_subject)
+        else:
+            selected_subjects.append(clean_subject)
+        
+        await state.update_data(selected_subjects=selected_subjects)
+        await message.answer("Yana fan tanlashingiz mumkin:", reply_markup=get_subjects_keyboard(selected_subjects))
+    else:
+        await message.answer("Iltimos, ro'yxatdagi tugmalardan foydalaning!")
+
+@dp.message(Registration.time_pref)
+async def process_time_pref(message: types.Message, state: FSMContext):
+    if message.text not in AVAILABLE_TIMES:
+        await message.answer("Iltimos, ro'yxatdagi vaqtlardan birini tanlang!")
+        return
+
+    user_data = await state.get_data()
+    
+    # Ma'lumotlarni saqlaymiz
+    save_student_data(
+        user_id=message.from_user.id,
+        name=user_data['name'],
+        phone=user_data['phone'],
+        filial=user_data['filial'],
+        subjects_list=user_data['selected_subjects'],
+        time_pref=message.text
+    )
+
+    # Yakuniy xabar: Telefon raqamlaringiz bilan birga ko'rsatiladi
+    await message.answer(
+        f"Tabriklaymiz, ro'yxatdan muvaffaqiyatli o'tdingiz! 🎉\n"
+        f"Sizning ma'lumotlaringiz 'Angren Akademiya' bazasiga to'liq joylashtirildi.\n\n"
+        f"**Biz bilan bog'lanish uchun quyidagi telefon raqamlariga murojaat qilishingiz mumkin:**\n"
+        f"📞 +998 94 041 42 55\n"
+        f"📞 +998 93 101 58 70",
         reply_markup=types.ReplyKeyboardRemove()
     )
-
-    try:
-        await bot.send_message(
-            ADMIN_ID,
-            f"Yangi royxat!\n\n"
-            f"Ism: {name}\n"
-            f"Tel: {phone}\n"
-            f"Filial: {filial}\n"
-            f"Kurslar:\n{courses_list}\n"
-            f"Vaqt: {vaqt}\n"
-            f"Sana: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
-        )
-    except Exception as e:
-        logging.error(f"Adminga xabar ketmadi: {e}")
-
     await state.clear()
 
-
+# --- SERVERNI ISHGA TUSHIRISH ---
 async def main():
     init_db()
-    init_excel()
     await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
-
+    
+    import aiohttp.web
+    async def dummy_handler(request):
+        return aiohttp.web.Response(text="Angren Akademiya boti 24/7 faol!")
+    
+    app = aiohttp.web.Application()
+    app.router.add_get("/", dummy_handler)
+    runner = aiohttp.web.AppRunner(app)
+    await runner.setup()
+    
+    port = int(os.getenv("PORT", 10000))
+    site = aiohttp.web.TCPSite(runner, "0.0.0.0", port)
+    
+    await asyncio.gather(site.start(), dp.start_polling(bot))
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        logging.info("Bot to'xtatildi.")v
