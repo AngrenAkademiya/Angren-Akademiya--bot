@@ -230,4 +230,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
-        logging.info("Bot to'xtatildi.")v
+        logging.info("Bot to'xtatildi.")
