@@ -133,7 +133,8 @@ def time_keyboard():
     )
 
 
-@dp.message(CommandStart()) async def cmd_start(message: types.Message, state: FSMContext):
+@dp.message(CommandStart()) 
+async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
     text = (
         "Assalomu alaykum!\n"
