@@ -11,7 +11,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import CommandStart
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-API_TOKEN = os.getenv("BOT_TOKEN" , "8583687270:AAFtlxuVDGnAsr_gWpPlc22nNcr4NEdD4Qg")
+API_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = 1243066883
 EXCEL_FILE = "angren_akademiya.xlsx"
 DB_FILE = "bot_data.db"
@@ -106,15 +106,28 @@ def get_courses_inline(selected=None):
         mark = "✅ " if course in selected else ""
         builder.button(text=f"{mark}{course}", callback_data=f"course_{index}")
     builder.button(text="✔️ Kurslarni Tasdiqlash", callback_data="confirm_courses")
+    builder.button(text="🔙 Orqaga", callback_data="back_to_filial")
     builder.adjust(1)
     return builder.as_markup()
+
+
+def phone_keyboard():
+    return types.ReplyKeyboardMarkup(
+        keyboard=[
+            [types.KeyboardButton(text="📞 Telefon raqamni yuborish", request_contact=True)],
+            [types.KeyboardButton(text="🔙 Orqaga")]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
 
 
 def filial_keyboard():
     return types.ReplyKeyboardMarkup(
         keyboard=[
             [types.KeyboardButton(text="Angren filiali")],
-            [types.KeyboardButton(text="Ohangaron filiali")]
+            [types.KeyboardButton(text="Ohangaron filiali")],
+            [types.KeyboardButton(text="🔙 Orqaga")]
         ],
         resize_keyboard=True,
         one_time_keyboard=True
@@ -126,123 +139,147 @@ def time_keyboard():
         keyboard=[
             [types.KeyboardButton(text="Ertalabki guruh")],
             [types.KeyboardButton(text="Kunduzgi guruh")],
-            [types.KeyboardButton(text="Kechqurungi guruh")]
+            [types.KeyboardButton(text="Kechqurungi guruh")],
+            [types.KeyboardButton(text="🔙 Orqaga")]
         ],
         resize_keyboard=True,
         one_time_keyboard=True
     )
 
 
-@dp.message(CommandStart()) 
+# --- HANDLERLAR QISMI ---
+
+@dp.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
-    await state.clear()
-    text = (
-        "Assalomu alaykum!\n"
-        "Angren Akademiyaga xush kelibsiz!\n\n"
-        "Biz sizning farzandingizni kelajakka tayyorlaymiz!\n"
-        "Respublika va xalqaro olimpiadalar g'oliblari yetishtiramiz!\n\n"
-        "Birinchi dars BEPUL!\n\n"
-        "Royxatdan otish uchun Ism va Familiyangizni kiriting:"
+    await message.answer(
+        "Assalomu alaykum! **Angren Akademiya** markazining rasmiy botiga xush kelibsiz.\n\n"
+        "Ro‘yxatdan o‘tish uchun iltimos, **ismingiz va familiyangizni** kiriting:",
+        parse_mode="Markdown"
     )
-    await message.answer(text)
     await state.set_state(RegState.waiting_for_name)
 
 
 @dp.message(RegState.waiting_for_name)
 async def process_name(message: types.Message, state: FSMContext):
-    name = message.text.strip()
-    if len(name) < 3:
-        await message.answer("Iltimos, toliq ism va familiyangizni kiriting:")
+    if message.text == "🔙 Orqaga":
+        await message.answer("Siz eng birinchi bosqichdasiz. Iltimos, ism-familiyangizni kiriting:")
         return
-    await state.update_data(name=name)
-    keyboard = types.ReplyKeyboardMarkup(
-        keyboard=[[types.KeyboardButton(text="Telefon raqamni yuborish", request_contact=True)]],
-        resize_keyboard=True,
-        one_time_keyboard=True
+
+    await state.update_data(name=message.text)
+    await message.answer(
+        "Rahmat! Endi pastdagi tugma orqali telefon raqamingizni yuboring yoki qo‘lda kiriting (Masalan: +998901234567):",
+        reply_markup=phone_keyboard()
     )
-    await message.answer(f"Rahmat, {name}!\n\nTelefon raqamingizni yuboring:", reply_markup=keyboard)
     await state.set_state(RegState.waiting_for_phone)
 
 
 @dp.message(RegState.waiting_for_phone)
 async def process_phone(message: types.Message, state: FSMContext):
-    phone = message.contact.phone_number if message.contact else (message.text.strip() if message.text else None)
-    if not phone:
-        await message.answer("Iltimos telefon raqamingizni yuboring:")
+    if message.text == "🔙 Orqaga":
+        await message.answer("Ism va familiyangizni qaytadan kiriting:", reply_markup=types.ReplyKeyboardRemove())
+        await state.set_state(RegState.waiting_for_name)
         return
+
+    phone = message.contact.phone_number if message.contact else message.text
     await state.update_data(phone=phone)
-    await message.answer("Qaysi filialni tanlaysiz?", reply_markup=filial_keyboard())
+    
+    await message.answer("O‘zingizga qulay bo‘lgan filialni tanlang:", reply_markup=filial_keyboard())
     await state.set_state(RegState.waiting_for_filial)
 
 
 @dp.message(RegState.waiting_for_filial)
 async def process_filial(message: types.Message, state: FSMContext):
-    filial = message.text.strip()
-    if filial not in VALID_FILIALS:
-        await message.answer("Iltimos, quyidagi tugmalardan birini tanlang:", reply_markup=filial_keyboard())
+    if message.text == "🔙 Orqaga":
+        await message.answer("Telefon raqamingizni qaytadan kiriting yoki yuboring:", reply_markup=phone_keyboard())
+        await state.set_state(RegState.waiting_for_phone)
         return
-    await state.update_data(filial=filial, selected_courses=[])
+
+    if message.text not in VALID_FILIALS:
+        await message.answer("Iltimos, faqat pastdagi tugmalardan birini tanlang!", reply_markup=filial_keyboard())
+        return
+
+    await state.update_data(filial=message.text)
+    await state.update_data(selected_courses=[])
+    
     await message.answer(
-        "Qaysi kurslarga yozilmoqchisiz?\n\n"
-        "Bir yoki bir nechta kursni tanlashingiz mumkin.\n"
-        "Tanlab bolgach, Kurslarni Tasdiqlash tugmasini bosing:",
-        reply_markup=get_courses_inline([])
+        "Qaysi kurslarda o‘qishni xohlaysiz? Bir nechta variantni tanlashingiz mumkin.\n"
+        "Tanlab bo‘lgach, **'✔️ Kurslarni Tasdiqlash'** tugmasini bosing:",
+        reply_markup=get_courses_inline([]),
+        parse_mode="Markdown"
     )
     await state.set_state(RegState.waiting_for_course)
 
 
-@dp.callback_query(F.data.startswith("course_"), RegState.waiting_for_course)
-async def inline_course_click(callback: types.CallbackQuery, state: FSMContext):
-    index = int(callback.data.split("_")[1])
-    course_name = VALID_COURSES[index]
+@dp.callback_query(RegState.waiting_for_course, F.data.startswith("course_"))
+async def process_course_selection(callback: types.CallbackQuery, state: FSMContext):
+    course_index = int(callback.data.split("_")[1])
+    course_name = VALID_COURSES[course_index]
+    
     user_data = await state.get_data()
-    selected = user_data.get("selected_courses", [])
-    if course_name in selected:
-        selected.remove(course_name)
+    selected_courses = user_data.get("selected_courses", [])
+    
+    if course_name in selected_courses:
+        selected_courses.remove(course_name)
     else:
-        selected.append(course_name)
-    await state.update_data(selected_courses=selected)
-    try:
-        await callback.message.edit_reply_markup(reply_markup=get_courses_inline(selected))
-    except Exception:
-        pass
+        selected_courses.append(course_name)
+        
+    await state.update_data(selected_courses=selected_courses)
+    await callback.message.edit_reply_markup(reply_markup=get_courses_inline(selected_courses))
     await callback.answer()
 
 
-@dp.callback_query(F.data == "confirm_courses", RegState.waiting_for_course)
-async def inline_confirm_click(callback: types.CallbackQuery, state: FSMContext):
+@dp.callback_query(RegState.waiting_for_course, F.data == "back_to_filial")
+async def back_to_filial(callback: types.CallbackQuery, state: FSMContext):
+    await callback.message.delete()
+    await callback.message.answer("Filialni qaytadan tanlang:", reply_markup=filial_keyboard())
+    await state.set_state(RegState.waiting_for_filial)
+    await callback.answer()
+
+
+@dp.callback_query(RegState.waiting_for_course, F.data == "confirm_courses")
+async def confirm_courses(callback: types.CallbackQuery, state: FSMContext):
     user_data = await state.get_data()
-    selected = user_data.get("selected_courses", [])
-    if not selected:
-        await callback.answer("Kamida bitta kurs tanlang!", show_alert=True)
+    selected_courses = user_data.get("selected_courses", [])
+    
+    if not selected_courses:
+        await callback.answer("Iltimos, kamida bitta kursni tanlang!", show_alert=True)
         return
-    try:
-        await callback.message.delete()
-    except Exception:
-        pass
-    await callback.message.answer("Qaysi vaqtda dars olishni xohlaysiz?", reply_markup=time_keyboard())
+        
+    await callback.message.delete()
+    await callback.message.answer("Darslar sizga qaysi vaqtda bo‘lishi qulay?", reply_markup=time_keyboard())
     await state.set_state(RegState.waiting_for_time)
     await callback.answer()
 
 
 @dp.message(RegState.waiting_for_time)
 async def process_time(message: types.Message, state: FSMContext):
-    vaqt = message.text.strip()
-    if vaqt not in VALID_TIMES: 
+    if message.text == "🔙 Orqaga":
+        await message.answer(
+            "Kurslarni qaytadan tanlang va tasdiqlang:",
+            reply_markup=get_courses_inline([])
+        )
+        await state.set_state(RegState.waiting_for_course)
+        return
+
+    if message.text not in VALID_TIMES:
         await message.answer("Iltimos, quyidagi tugmalardan birini tanlang:", reply_markup=time_keyboard())
         return
+
+    vaqt = message.text
     data = await state.get_data()
     name = data.get("name")
     phone = data.get("phone")
     filial = data.get("filial")
     courses = data.get("selected_courses", [])
+
     save_data(name, phone, filial, courses, vaqt)
     courses_list = "\n".join([f"- {c}" for c in courses])
+
     await message.answer(
         f"Hurmatli {name}!\n\n"
         f"Bizni tanlaganingizdan mamnunmiz.\n"
         f"Tez orada operatorlarimiz siz bilan boglanishadi!\n\n"
-        f"Yoki biz bilan boganing:\n"
+        f"Yoki biz bilan boglaning:\n"
         f"+998997925870\n"
         f"+998931015870\n\n"
         f"Malumotlaringiz:\n"
@@ -253,6 +290,7 @@ async def process_time(message: types.Message, state: FSMContext):
         f"Vaqt: {vaqt}",
         reply_markup=types.ReplyKeyboardRemove()
     )
+
     try:
         await bot.send_message(
             ADMIN_ID,
@@ -266,6 +304,7 @@ async def process_time(message: types.Message, state: FSMContext):
         )
     except Exception as e:
         logging.error(f"Adminga xabar ketmadi: {e}")
+
     await state.clear()
 
 
