@@ -10,12 +10,12 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
 from aiohttp import web, ClientSession
 import openpyxl
 from openpyxl import Workbook
+from openpyxl.styles import Alignment
 
 # Loglarni sozlash
 logging.basicConfig(level=logging.INFO)
 
 API_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = 8944437  # Sizning Telegram ID raqamingiz (avtomatik excel olish uchun)
 
 if not API_TOKEN:
     raise ValueError("Xatolik: BOT_TOKEN topilmadi! Render sozlamalarini tekshiring.")
@@ -23,7 +23,7 @@ if not API_TOKEN:
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-# EXCELGA YOZISH FUNKSIYASI
+# EXCELGA YOZISH TIZIMI
 EXCEL_FILE = "students.xlsx"
 
 def save_to_excel(data):
@@ -35,10 +35,16 @@ def save_to_excel(data):
         ws.append(["Sana", "Ism Familiya", "Tel Raqam", "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar"])
         wb.save(EXCEL_FILE)
     
-    # Ma'lumotni qo'shish
     wb = openpyxl.load_workbook(EXCEL_FILE)
     ws = wb.active
-    sana = datetime.now().strftime("%Y-%m-%d %H:%M")
+    
+    # Sanani Kun.Oy.Yil formatida aniq yozamiz
+    sana = datetime.now().strftime("%d.%m.%Y %H:%M")
+    
+    # Tanlangan fanlarni Excel katagida pastga qarab tartibli joylashtirish
+    courses_list = data.get("selected_courses", [])
+    courses_string = "\n".join([f"• {c.replace('\n', ' ')}" for c in courses_list])
+    
     ws.append([
         sana,
         data.get("name"),
@@ -48,8 +54,36 @@ def save_to_excel(data):
         data.get("grade"),
         data.get("filial"),
         data.get("time_pref"),
-        ", ".join(data.get("selected_courses", []))
+        courses_string
     ])
+    
+    # USTUNLARNI HAM YONIGA, HAM PASTIGA AVTOMATIK MOSLASH (WRAP TEXT)
+    for col in ws.columns:
+        max_len = 0
+        col_letter = openpyxl.utils.get_column_letter(col[0].column)
+        for cell in col:
+            # Katak ichida matnni o'rtalab, chiroyli joylashtirish
+            cell.alignment = Alignment(wrap_text=True, vertical="center", horizontal="left")
+            if cell.value:
+                lines = str(cell.value).split('\n')
+                for line in lines:
+                    if len(line) > max_len:
+                        max_len = len(line)
+        
+        # Ustun kengligini matnga qarab yonboshga cho'zamiz
+        ws.column_dimensions[col_letter].width = max(min(max_len + 4, 38), 15)
+        
+    # Katak balandligini o'quvchi tanlagan fanlar soniga qarab pastga kengaytirish
+    for row in ws.iter_rows(min_row=2):
+        max_lines = 1
+        for cell in row:
+            if cell.value:
+                lines_count = str(cell.value).count('\n') + 1
+                if lines_count > max_lines:
+                    max_lines = lines_count
+        # Har bitta qator erkin sig'ishi uchun pastga qarab balandlik beramiz
+        ws.row_dimensions[row[0].row].height = max_lines * 18 if max_lines > 1 else None
+
     wb.save(EXCEL_FILE)
 
 # --- RO'YXATDAN O'TISH HOLATLARI (FSM ZANJIRI) ---
@@ -63,17 +97,17 @@ class Registration(StatesGroup):
     subjects = State()
     time_pref = State()
 
-# --- AKADEMIYA ASOSIY MA'LUMOTLARI ---
+# --- AKADEMIYA ASOSIY MA'LUMOTLARI (ASL MATNLARI BILAN) ---
 AVAILABLE_FILIALS = ["Angren", "Ohangaron"]
 AVAILABLE_TIMES = ["Ettalabgi", "Kunduzgi", "Kechki"]
 AVAILABLE_SUBJECTS = [
     "Matematika - Milliy va xalqaro sertifikat",
     "Matematika - majburiy blok ucun",
     "Ingliz tili - ILTES",
-    "Tibbiyot - shifokorlik kasblari uchun Kimyo - Milliy va xalqaro sertifikat",
+    "Tibbiyot - shifokorlik kasblari uchun\nKimyo - Milliy va xalqaro sertifikat",
     "Prezident maktablariga tayyorlov",
     "Al-Xorazmiy maktablariga tayyorlov",
-    "Tibbiyot-shifokorlik kasbini tanlaganlar uchun- biologiya - Milliy va xalqaro sertifikat",
+    "Tibbiyot-shifokorlik kasbini tanlaganlar uchun-\nbiologiya - Milliy va xalqaro sertifikat",
     "Tarix- Milliy sertifikat",
     "Tarix -Majburiy blok uchun",
     "Huqu-Milliy sertifikat",
@@ -100,7 +134,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
         reply_markup=get_main_menu()
     )
 
-# ADMIN UCHUN EXCEL FAILNI YUKLAB OLISH BUYRUG'I
+# FAQAT ADMIN CHAQIRA OLADIGAN EXCEL YUKLASH BUYRUG'I
 @dp.message(F.text == "/excel")
 async def send_excel(message: types.Message):
     if os.path.exists(EXCEL_FILE):
@@ -170,7 +204,7 @@ async def method_payment(callback: types.CallbackQuery):
         await callback.message.answer("💵 To'lovni administratorga topshiring. Rahmat!")
     await callback.answer()
 
-# --- RO'YXATDAN O'TISH ---
+# --- RO'YXATDAN O'TISH BOSQICHMI-BOSQICH ---
 @dp.message(F.text == "📝 Ro'yxatdan o'tish")
 async def start_registration(message: types.Message, state: FSMContext):
     await message.answer("Ism va familiyangizni kiriting:")
@@ -224,12 +258,14 @@ async def show_subjects_keyboard(message: types.Message, selected_courses: list)
     kb = InlineKeyboardBuilder()
     for idx, subject in enumerate(AVAILABLE_SUBJECTS):
         status = "✅" if subject in selected_courses else ""
-        kb.button(text=f"{subject} {status}", callback_data=f"sub_{idx}")
+        # Tugma matnidagi \n ni olib tashlaymiz, telegram o'zi avtomat 2-qatorga bo'ladi
+        clean_subject = subject.replace('\n', ' ')
+        kb.button(text=f"{clean_subject} {status}", callback_data=f"sub_{idx}")
     kb.button(text="➡️ Davom etish", callback_data="sub_done")
     kb.adjust(1)
     text = "📚 **Kurslarni tanlang:**\n\n"
     if selected_courses:
-        text += "Tanlanganlar:\n" + "\n".join([f"- {c}" for c in selected_courses])
+        text += "Tanlanganlar:\n" + "\n".join([f"- {c.replace('\n', ' ')}" for c in selected_courses])
     
     if isinstance(message, types.Message):
         await message.answer(text, reply_markup=kb.as_markup())
@@ -274,11 +310,11 @@ async def process_time_pref(message: types.Message, state: FSMContext):
     await state.update_data(time_pref=message.text)
     user_data = await state.get_data()
     
-    # EXCELGA SAQLASH FUNKSIYASINI CHAQIRAMIZ
+    # EXCEL BAZAGA YUKLASH FUNKSIYASI CHAQIRILADI
     save_to_excel(user_data)
     
     selected_courses = user_data.get("selected_courses", [])
-    courses_output = "📚 Tanlangan kurslar:\n" + "".join([f"• {c}\n" for c in selected_courses])
+    courses_output = "📚 Tanlangan kurslar:\n" + "".join([f"• {c.replace('\n', ' ')}\n" for c in selected_courses])
 
     student_report = (
         f"🎉 **Muvaffaqiyatli ro'yxatdan o'tdingiz!**\n\n"
@@ -302,7 +338,7 @@ async def process_time_pref(message: types.Message, state: FSMContext):
         
     await state.clear()
 
-# --- RENDER PORTI (HEALTH CHECK) ---
+# --- RENDER PORTI ---
 async def handle_health(request):
     return web.Response(text="Angren Akademiya boti faol!")
 
@@ -314,26 +350,20 @@ async def start_web_server():
     port = int(os.getenv("PORT", 10000))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    logging.info(f"Veb-server {port}-portda ishga tushdi.")
 
-# --- UYG'OTUVCHI FUNKSIYA (SELF-PING) ---
+# --- SELF-PING TIZIMI ---
 async def pinger_loop():
     app_url = os.getenv("APP_URL")
     if not app_url:
-        logging.warning("Diqqat: APP_URL muhit o'zgaruvchisi topilmadi. Bot o'z-oʻzini uyg'ota olmaydi!")
         return
-
-    logging.info("O'z-o'zini uyg'otish (Self-Ping) tizimi ishga tushdi.")
     await asyncio.sleep(10)
-
     while True:
         try:
             async with ClientSession() as session:
                 async with session.get(app_url) as response:
-                    status = response.status
-                    logging.info(f"Uyg'otish signali yuborildi. Status: {status}")
-        except Exception as e:
-            logging.error(f"Uyg'otishda xatolik yuz berdi: {e}")
+                    pass
+        except Exception:
+            pass
         await asyncio.sleep(300)
 
 async def main():
