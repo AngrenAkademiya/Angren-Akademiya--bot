@@ -262,6 +262,7 @@ async def process_time_pref(message: types.Message, state: FSMContext):
         f"🏫 Maktab/Sinf: {user_data.get('school')}, {user_data.get('grade')}\n"
         f"📍 Filial: {user_data.get('filial')} | 🕒 Smena: {message.text}\n\n"
         f"{courses_output}\n"
+        f"📞 **Biz bilan bog'lanish uchun:**\n"
         f"📞 +998 94 041 42 55\n📞 +998 93 101 58 70"
     )
 
