@@ -70,24 +70,13 @@ async def cmd_start(message: types.Message, state: FSMContext):
 
 @dp.message(F.text == "📈 Bilim darajasini tekshirish")
 async def check_knowledge(message: types.Message):
-    today = datetime.now().day
-    muhlat_sanasi = 15  
-    tulov_qilingan = False 
-    
-    if not tulov_qilingan and today > muhlat_sanasi:
-        await message.answer(
-            "🔒 **\"Angren Akademiya\" — Tizim cheklangan**\n\n"
-            f"Hurmatli ota-ona! Kelishilgan oylik to'lov muddati ({muhlat_sanasi}-sana) o'tib ketganligi sababli, "
-            "farzandingizning bilim nazorati vaqtinchalik MUZLATILDI.\n\n"
-            "Tizimni qayta faollashtirish uchun iltimos, oylik to'lovni amalga oshiring."
-        )
-    else:
-        await message.answer(
-            "📊 **\"Angren Akademiya\" Bilim Nazorati**\n\n"
-            "👤 O'quvchi: **Kamolova Kamila**\n\n"
-            "🔹 **Kimyo (Sertifikat kursi):** 26 / 30 ta to'g'ri (86%) ✅ *A'lo*\n"
-            "🔹 **Matematika (Majburiy):** 9 / 10 ta to'g'ri (90%) ✅ *A'lo*\n\n"
-            "💬 **Ustoz tavsiyasi:** O'zlashtirish juda yaxshi, shu zaylda davom eting!"
+    await message.answer(
+        "📊 **\"Angren Akademiya\" — Bilim Nazorati Tizimi**\n\n"
+        "✨ **Yaqin kunlarda hammasi yanada mukammal boʻladi!**\n\n"
+        "Kelajakda farzandingiz bizning **\"Angren Akademiya\"** oʻquv markazimizni tanlaganda, "
+        "ushbu tugma orqali har bir ota-ona aynan oʻz farzandining ismi, darsdagi ishtiroki va "
+        "haqiqiy imtihon natijalari bilan muntazam tanishib borish imkoniyatiga ega boʻladi.\n\n"
+        "🚀 *Biz kelajak texnologiyalarini taʼlimga olib kirmoqdamiz!*"
         )
 
 @dp.message(F.text == "🚪 Davomat (Keldim/Ketdim)")
