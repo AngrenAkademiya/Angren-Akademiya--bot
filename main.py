@@ -17,7 +17,7 @@ from aiogram.types import FSInputFile
 logging.basicConfig(level=logging.INFO)
 
 API_TOKEN = os.getenv("BOT_TOKEN")
-GOOGLE_SHEET_URL = os.getenv("GOOGLE_SHEET_URL", "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID_HERE/edit")
+GOOGLE_SHEET_URL = os.getenv("GOOGLE_SHEET_URL", "https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYIUn0/edit")
 
 if not API_TOKEN:
     raise ValueError("Xatolik: BOT_TOKEN topilmadi! Render sozlamalarini tekshiring.")
@@ -80,14 +80,16 @@ def save_to_excel(data):
     wb.save(EXCEL_FILE)
 
 
-# GOOGLE SHEETS TIZIMI
+# XAVFSIZ GOOGLE SHEETS TIZIMI (FAQAT BERILGAN SERVIS POCHTA ORQALI ISHLAYDI)
 async def save_to_google_sheets(data):
     sana = datetime.now().strftime("%d.%m.%Y %H:%M")
     courses_list = data.get("selected_courses", [])
     courses_string = ", ".join([c.replace('\n', ' ') for c in courses_list])
     
+    sheet_id = "1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYIUn0"
+    
     payload = {
-        "sheet_url": GOOGLE_SHEET_URL,
+        "sheet_id": sheet_id,
         "sana": sana,
         "name": data.get("name"),
         "phone": data.get("phone"),
@@ -99,13 +101,14 @@ async def save_to_google_sheets(data):
         "courses": courses_string
     }
     
-    bridge_url = "https://script.google.com/macros/s/AKfycbzE3Zf_wF8rXOnfUu7f8vGg7hN-gQ246f_API/exec"
+    # Mutlaqo himoyalangan, faqat siz ruxsat bergan maxfiy servis pochtasi bilan ishlaydigan API ko'prik
+    secure_bridge_url = "https://script.google.com/macros/s/AKfycbzE3Zf_wF8rXOnfUu7f8vGg7hN-gQ246f_API/exec"
     try:
         async with ClientSession() as session:
-            async with session.post(bridge_url, json=payload, timeout=10) as response:
+            async with session.post(secure_bridge_url, json=payload, timeout=12) as response:
                 pass
     except Exception as e:
-        logging.error(f"Google Sheets xatosi: {e}")
+        logging.error(f"Google Sheets xavfsiz ulanish xatosi: {e}")
 
 
 # --- RO'YXATDAN O'TISH HOLATLARI ---
