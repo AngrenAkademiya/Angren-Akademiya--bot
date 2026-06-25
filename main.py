@@ -25,14 +25,13 @@ if not API_TOKEN:
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-# EXCELGA YOZISH TIZIMI (Umumiy va Kunlik alohida varaqlarda saqlash)
+# EXCELGA YOZISH TIZIMI
 EXCEL_FILE = "students.xlsx"
 
 def save_to_excel(data):
     sana_toliq = datetime.now().strftime("%d.%m.%Y %H:%M")
-    sana_kunlik = datetime.now().strftime("%d.%m.%Y") # Varaq nomi uchun faqat kun (DD.MM.YYYY)
+    sana_kunlik = datetime.now().strftime("%d.%m.%Y")
     
-    # 1. Excel fayli mavjud bo'lmasa, yangi ochish
     if not os.path.exists(EXCEL_FILE):
         wb = Workbook()
         ws_main = wb.active
@@ -41,11 +40,8 @@ def save_to_excel(data):
         wb.save(EXCEL_FILE)
     
     wb = openpyxl.load_workbook(EXCEL_FILE)
-    
-    # 2. Umumiy varaqqa yozish
     ws_main = wb["O'quvchilar"]
     
-    # 3. YANGLIK: Bugungi kun uchun alohida varaq bormi? Yo'q bo'lsa ochamiz
     if sana_kunlik not in wb.sheetnames:
         ws_daily = wb.create_sheet(title=sana_kunlik)
         ws_daily.append(["Sana", "Ism Familiya", "Tel Raqam", "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar"])
@@ -60,11 +56,9 @@ def save_to_excel(data):
         data.get("school"), data.get("grade"), data.get("filial"), data.get("time_pref"), courses_string
     ]
     
-    # Ma'lumotni ham umumiy varaqqa, ham kunlik varaqqa qo'shamiz
     ws_main.append(row_data)
     ws_daily.append(row_data)
     
-    # Har ikkala varaqning dizayni va katak o'lchamlarini to'g'rilash
     for ws in [ws_main, ws_daily]:
         for col in ws.columns:
             max_len = 0
@@ -212,7 +206,7 @@ async def attendance_menu(message: types.Message):
     kb.button(text="🚀 Uzoq muddatli imtiyozlar", callback_data="attendance_promo") 
     kb.adjust(2, 1, 1)
     await message.answer(
-        "🚪 **Angren Akademiyasi — Davomat va Shaxsiy Balans**\n\nKerakli tugmani bosing:",
+        "🚪 **Angren Akademiyesi — Davomat va Shaxsiy Balans**\n\nKerakli tugmani bosing:",
         reply_markup=kb.as_markup()
     )
 
@@ -351,15 +345,25 @@ async def process_time_pref(message: types.Message, state: FSMContext):
     await save_to_google_sheets(data)
     await state.clear()
     
-    await message.answer(
+    caption_text = (
         "🎉 **Muvaffaqiyatli ro'yxatdan o'tdingiz!**\n\n"
         "Tez orada mas'ul xodimlarimiz siz bilan bog'lanishadi.\n\n"
         "📞 **Biz bilan bog'lanish uchun:**\n"
         "+998901335252\n"
         "+998940135252\n\n"
-        "Angren Akademiyasini tanlaganingiz uchun rahmat!",
-        reply_markup=get_main_menu()
+        "Angren Akademiyasini tanlaganingiz uchun rahmat!"
     )
+    
+    # TIKLANDI: Siz o'rnatgan o'sha shifokorlar rasm faylini chaqirish kodi 100% joyiga qaytdi
+    if os.path.exists("rasm.jpg"):
+        try:
+            photo = types.FSInputFile("rasm.jpg")
+            await message.answer_photo(photo=photo, caption=caption_text, reply_markup=get_main_menu())
+            return
+        except Exception as e:
+            logging.error(f"Rasm yuborishda xato: {e}")
+            
+    await message.answer(caption_text, reply_markup=get_main_menu())
 
 # --- PORT OCHISH VA ASOSIY FUNKSIYA ---
 async def handle_ping(request):
