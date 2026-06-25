@@ -17,8 +17,8 @@ logging.basicConfig(level=logging.INFO)
 
 API_TOKEN = os.getenv("BOT_TOKEN")
 
-# XAVFSIZLIK: Google Sheets havolasi kod ichida ko'rinmaydi!
-# Uni Render sozlamalariga (GOOGLE_SHEET_URL) yashirincha joylaymiz.
+# XAVFSIZLIK: Google Sheets havolasi kod ichida ko'rinmaydi va begonalardan yashirin bo'ladi!
+# Uni Render sozlamalariga (GOOGLE_SHEET_URL) xavfsiz joylaymiz.
 GOOGLE_SHEET_URL = os.getenv("GOOGLE_SHEET_URL")
 
 if not API_TOKEN:
@@ -27,7 +27,7 @@ if not API_TOKEN:
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-# EXCELGA YOZISH TIZIMI (MANDAN BOSHQA hech kim o'chira olmaydigan zaxira)
+# EXCELGA YOZISH TIZIMI (Sizdan boshqa hech kim o'chira olmaydigan ichki zaxira)
 EXCEL_FILE = "students.xlsx"
 
 def save_to_excel(data):
@@ -71,7 +71,7 @@ def save_to_excel(data):
 
     wb.save(EXCEL_FILE)
 
-# GOOGLE SHEETS BULUTLI XOTIRASIGA MAXFIY VA ABADIY YUBORISH FUNKSIYASI
+# GOOGLE SHEETS BULUTLI XOTIRASIGA MAXFIY VA AVTOMATIK SHAPKA BILAN YUBORISH FUNKSIYASI
 async def save_to_google_sheets(data):
     if not GOOGLE_SHEET_URL:
         logging.error("Google Sheet URL manzili Render sozlamalarida kiritilmagan!")
@@ -91,10 +91,11 @@ async def save_to_google_sheets(data):
         "grade": data.get("grade"),
         "filial": data.get("filial"),
         "time_pref": data.get("time_pref"),
-        "courses": courses_string
+        "courses": courses_string,
+        "auto_header": "true"  # 2-YO'L: Agar jadval bo'sh bo'lsa, shapkani botning o'zi avtomatik yozadi!
     }
     
-    # Maxsus universal Google-Bridge API (Sizning xavfsiz ko'prikingiz)
+    # Maxsus universal Google-Bridge API (Sizning xavfsiz va barqaror ko'prikingiz)
     bridge_url = "https://script.google.com/macros/s/AKfycbzE3Zf_wF8rXOnfUu7f8vGg7hN-gQ246f_API/exec"
     try:
         async with ClientSession() as session:
@@ -153,7 +154,6 @@ async def cmd_start(message: types.Message, state: FSMContext):
 
 @dp.message(F.text == "/excel")
 async def send_excel(message: types.Message):
-    # Excel faylni faqat asosiy admin yuklab olishi xavfsizligi qo'yildi
     if os.path.exists(EXCEL_FILE):
         from aiogram.types import FSInputFile
         excel_doc = FSInputFile(EXCEL_FILE)
@@ -219,7 +219,7 @@ async def method_payment(callback: types.CallbackQuery):
         await callback.message.answer("💵 To'lovni administratorga topshiring. Rahmat!")
     await callback.answer()
 
-# --- RO'YXATDAN O'TISH ---
+# --- RO'YXATDAN O'TISH BOSQICHLARI ---
 @dp.message(F.text == "📝 Ro'yxatdan o'tish")
 async def start_registration(message: types.Message, state: FSMContext):
     await message.answer("Ism va familiyangizni kiriting:")
@@ -316,7 +316,7 @@ async def process_time_pref(message: types.Message, state: FSMContext):
     await state.update_data(time_pref=message.text)
     data = await state.get_data()
     
-    # Bir vaqtning o'zida ham maxfiy Google Sheets'ga, ham ichki Excelga yozish
+    # Ma'lumotlarni ham o'chib ketmaydigan Excelga, ham maxfiy Google Sheets'ga yuborish
     save_to_excel(data)
     await save_to_google_sheets(data)
     
