@@ -17,8 +17,7 @@ logging.basicConfig(level=logging.INFO)
 
 API_TOKEN = os.getenv("BOT_TOKEN")
 
-# XAVFSIZLIK: Google Sheets havolasi kod ichida ko'rinmaydi va begonalardan yashirin bo'ladi!
-# Uni Render sozlamalariga (GOOGLE_SHEET_URL) xavfsiz joylaymiz.
+# XAVFSIZLIK: Google Sheets havolasi Render sozlamalariga yashirinadi!
 GOOGLE_SHEET_URL = os.getenv("GOOGLE_SHEET_URL")
 
 if not API_TOKEN:
@@ -27,7 +26,7 @@ if not API_TOKEN:
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-# EXCELGA YOZISH TIZIMI (Sizdan boshqa hech kim o'chira olmaydigan ichki zaxira)
+# EXCELGA YOZISH TIZIMI (Zaxira uchun)
 EXCEL_FILE = "students.xlsx"
 
 def save_to_excel(data):
@@ -43,7 +42,7 @@ def save_to_excel(data):
     sana = datetime.now().strftime("%d.%m.%Y %H:%M")
     
     courses_list = data.get("selected_courses", [])
-    courses_string = "\n".join([f"• {c.replace('\n', ' ')}" for c in courses_list])
+    courses_string = "\n".join([f"• {c}" for c in courses_list])
     
     ws.append([
         sana, data.get("name"), data.get("phone"), data.get("parent_phone"),
@@ -71,7 +70,7 @@ def save_to_excel(data):
 
     wb.save(EXCEL_FILE)
 
-# GOOGLE SHEETS BULUTLI XOTIRASIGA MAXFIY VA AVTOMATIK SHAPKA BILAN YUBORISH FUNKSIYASI
+# GOOGLE SHEETS BULUTLI XOTIRASIGA MAXFIY VA ASLIY REJIMDA YUBORISH FUNKSIYASI
 async def save_to_google_sheets(data):
     if not GOOGLE_SHEET_URL:
         logging.error("Google Sheet URL manzili Render sozlamalarida kiritilmagan!")
@@ -79,7 +78,7 @@ async def save_to_google_sheets(data):
 
     sana = datetime.now().strftime("%d.%m.%Y %H:%M")
     courses_list = data.get("selected_courses", [])
-    courses_string = ", ".join([c.replace('\n', ' ') for c in courses_list])
+    courses_string = "\n".join([f"• {c}" for c in courses_list])
     
     payload = {
         "sheet_url": GOOGLE_SHEET_URL,
@@ -92,10 +91,9 @@ async def save_to_google_sheets(data):
         "filial": data.get("filial"),
         "time_pref": data.get("time_pref"),
         "courses": courses_string,
-        "auto_header": "true"  # 2-YO'L: Agar jadval bo'sh bo'lsa, shapkani botning o'zi avtomatik yozadi!
+        "auto_header": "true"
     }
     
-    # Maxsus universal Google-Bridge API (Sizning xavfsiz va barqaror ko'prikingiz)
     bridge_url = "https://script.google.com/macros/s/AKfycbzE3Zf_wF8rXOnfUu7f8vGg7hN-gQ246f_API/exec"
     try:
         async with ClientSession() as session:
@@ -276,7 +274,7 @@ async def show_subjects_keyboard(message: types.Message, selected_courses: list)
     kb.adjust(1)
     text = "📚 **Kurslarni tanlang:**\n\n"
     if selected_courses:
-        text += "Tanlanganlar:\n" + "\n".join([f"- {c.replace('\n', ' ')}" for c in selected_courses])
+        text += "Tanlanganlar:\n" + "\n".join([f"- {c}" for c in selected_courses])
     if isinstance(message, types.Message):
         await message.answer(text, reply_markup=kb.as_markup())
     else:
@@ -316,14 +314,18 @@ async def process_time_pref(message: types.Message, state: FSMContext):
     await state.update_data(time_pref=message.text)
     data = await state.get_data()
     
-    # Ma'lumotlarni ham o'chib ketmaydigan Excelga, ham maxfiy Google Sheets'ga yuborish
     save_to_excel(data)
     await save_to_google_sheets(data)
     
     await state.clear()
+    
+    # TIKLANDI: Bog'lanish telefon raqamlari joyiga qaytarildi!
     await message.answer(
         "🎉 **Muvaffaqiyatli ro'yxatdan o'tdingiz!**\n\n"
-        "Tez orada mas'ul xodimlarimiz siz bilan bog'lanishadi. "
+        "Tez orada mas'ul xodimlarimiz siz bilan bog'lanishadi.\n\n"
+        "📞 **Biz bilan bog'lanish uchun:**\n"
+        "+998901335252\n"
+        "+998940135252\n\n"
         "Angren Akademiyasini tanlaganingiz uchun rahmat!",
         reply_markup=get_main_menu()
     )
