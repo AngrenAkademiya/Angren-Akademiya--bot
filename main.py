@@ -16,9 +16,8 @@ from openpyxl.styles import Alignment
 logging.basicConfig(level=logging.INFO)
 
 API_TOKEN = os.getenv("BOT_TOKEN")
-
-# XAVFSIZLIK: Google Sheets havolasi Render sozlamalariga yashirinadi!
 GOOGLE_SHEET_URL = os.getenv("GOOGLE_SHEET_URL")
+APP_URL = os.getenv("APP_URL")
 
 if not API_TOKEN:
     raise ValueError("Xatolik: BOT_TOKEN topilmadi! Render sozlamalarini tekshiring.")
@@ -26,51 +25,69 @@ if not API_TOKEN:
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-# EXCELGA YOZISH TIZIMI (Zaxira uchun)
+# EXCELGA YOZISH TIZIMI (Umumiy va Kunlik alohida varaqlarda saqlash)
 EXCEL_FILE = "students.xlsx"
 
 def save_to_excel(data):
+    sana_toliq = datetime.now().strftime("%d.%m.%Y %H:%M")
+    sana_kunlik = datetime.now().strftime("%d.%m.%Y") # Varaq nomi uchun faqat kun (DD.MM.YYYY)
+    
+    # 1. Excel fayli mavjud bo'lmasa, yangi ochish
     if not os.path.exists(EXCEL_FILE):
         wb = Workbook()
-        ws = wb.active
-        ws.title = "O'quvchilar"
-        ws.append(["Sana", "Ism Familiya", "Tel Raqam", "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar"])
+        ws_main = wb.active
+        ws_main.title = "O'quvchilar"
+        ws_main.append(["Sana", "Ism Familiya", "Tel Raqam", "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar"])
         wb.save(EXCEL_FILE)
     
     wb = openpyxl.load_workbook(EXCEL_FILE)
-    ws = wb.active
-    sana = datetime.now().strftime("%d.%m.%Y %H:%M")
+    
+    # 2. Umumiy varaqqa yozish
+    ws_main = wb["O'quvchilar"]
+    
+    # 3. YANGLIK: Bugungi kun uchun alohida varaq bormi? Yo'q bo'lsa ochamiz
+    if sana_kunlik not in wb.sheetnames:
+        ws_daily = wb.create_sheet(title=sana_kunlik)
+        ws_daily.append(["Sana", "Ism Familiya", "Tel Raqam", "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar"])
+    else:
+        ws_daily = wb[sana_kunlik]
     
     courses_list = data.get("selected_courses", [])
     courses_string = "\n".join([f"• {c}" for c in courses_list])
     
-    ws.append([
-        sana, data.get("name"), data.get("phone"), data.get("parent_phone"),
+    row_data = [
+        sana_toliq, data.get("name"), data.get("phone"), data.get("parent_phone"),
         data.get("school"), data.get("grade"), data.get("filial"), data.get("time_pref"), courses_string
-    ])
+    ]
     
-    for col in ws.columns:
-        max_len = 0
-        col_letter = openpyxl.utils.get_column_letter(col[0].column)
-        for cell in col:
-            cell.alignment = Alignment(wrap_text=True, vertical="center", horizontal="left")
-            if cell.value:
-                lines = str(cell.value).split('\n')
-                for line in lines:
-                    if len(line) > max_len: max_len = len(line)
-        ws.column_dimensions[col_letter].width = max(min(max_len + 4, 38), 15)
-        
-    for row in ws.iter_rows(min_row=2):
-        max_lines = 1
-        for cell in row:
-            if cell.value:
-                lines_count = str(cell.value).count('\n') + 1
-                if lines_count > max_lines: max_lines = lines_count
-        ws.row_dimensions[row[0].row].height = max_lines * 18 if max_lines > 1 else None
+    # Ma'lumotni ham umumiy varaqqa, ham kunlik varaqqa qo'shamiz
+    ws_main.append(row_data)
+    ws_daily.append(row_data)
+    
+    # Har ikkala varaqning dizayni va katak o'lchamlarini to'g'rilash
+    for ws in [ws_main, ws_daily]:
+        for col in ws.columns:
+            max_len = 0
+            col_letter = openpyxl.utils.get_column_letter(col[0].column)
+            for cell in col:
+                cell.alignment = Alignment(wrap_text=True, vertical="center", horizontal="left")
+                if cell.value:
+                    lines = str(cell.value).split('\n')
+                    for line in lines:
+                        if len(line) > max_len: max_len = len(line)
+            ws.column_dimensions[col_letter].width = max(min(max_len + 4, 38), 15)
+            
+        for row in ws.iter_rows(min_row=2):
+            max_lines = 1
+            for cell in row:
+                if cell.value:
+                    lines_count = str(cell.value).count('\n') + 1
+                    if lines_count > max_lines: max_lines = lines_count
+            ws.row_dimensions[row[0].row].height = max_lines * 18 if max_lines > 1 else None
 
     wb.save(EXCEL_FILE)
 
-# GOOGLE SHEETS BULUTLI XOTIRASIGA MAXFIY VA ASLIY REJIMDA YUBORISH FUNKSIYASI
+# GOOGLE SHEETS TIZIMI
 async def save_to_google_sheets(data):
     if not GOOGLE_SHEET_URL:
         logging.error("Google Sheet URL manzili Render sozlamalarida kiritilmagan!")
@@ -100,9 +117,25 @@ async def save_to_google_sheets(data):
             async with session.post(bridge_url, json=payload, timeout=10) as response:
                 pass
     except Exception as e:
-        logging.error(f"Google Sheets'ga yozishda xato (Lekin Excel xavfsiz saqladi): {e}")
+        logging.error(f"Google Sheets'ga yozishda xato: {e}")
 
-# --- RO'YXATDAN O'TISH HOLATLARI ---
+# --- QOROVUL UYG'OTISH MEXANIZMI ---
+async def self_ping():
+    if not APP_URL:
+        logging.warning("APP_URL kiritilmagan, qorovul tizimi ishga tushmadi!")
+        return
+    
+    await asyncio.sleep(30)
+    while True:
+        try:
+            async with ClientSession() as session:
+                async with session.get(APP_URL, timeout=10) as response:
+                    logging.info(f"Qorovul tizimi: Server muvaffaqiyatli uyg'otildi! Status: {response.status}")
+        except Exception as e:
+            logging.error(f"Qorovul pampingida xato: {e}")
+        await asyncio.sleep(600)
+
+# --- STATES ---
 class Registration(StatesGroup):
     name = State()
     phone = State()
@@ -113,7 +146,7 @@ class Registration(StatesGroup):
     subjects = State()
     time_pref = State()
 
-# --- AKADEMIYA ASOSIY MA'LUMOTLARI ---
+# --- MA'LUMOTLAR ---
 AVAILABLE_FILIALS = ["Angren", "Ohangaron"]
 AVAILABLE_TIMES = ["Ertalabki", "Kunduzgi", "Kechki"]
 AVAILABLE_SUBJECTS = [
@@ -316,10 +349,8 @@ async def process_time_pref(message: types.Message, state: FSMContext):
     
     save_to_excel(data)
     await save_to_google_sheets(data)
-    
     await state.clear()
     
-    # TIKLANDI: Bog'lanish telefon raqamlari joyiga qaytarildi!
     await message.answer(
         "🎉 **Muvaffaqiyatli ro'yxatdan o'tdingiz!**\n\n"
         "Tez orada mas'ul xodimlarimiz siz bilan bog'lanishadi.\n\n"
@@ -330,7 +361,25 @@ async def process_time_pref(message: types.Message, state: FSMContext):
         reply_markup=get_main_menu()
     )
 
+# --- PORT OCHISH VA ASOSIY FUNKSIYA ---
+async def handle_ping(request):
+    return web.Response(text="Angren Akademiya Bot Is Running!")
+
 async def main():
+    port = int(os.environ.get("PORT", 10000))
+    
+    app = web.Application()
+    app.router.add_get("/", handle_ping)
+    
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    
+    await site.start()
+    logging.info(f"Render porti {port} da ochildi.")
+    
+    asyncio.create_task(self_ping())
+    
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
