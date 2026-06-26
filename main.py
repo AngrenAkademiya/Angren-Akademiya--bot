@@ -12,13 +12,13 @@ import openpyxl
 from openpyxl import Workbook
 from openpyxl.styles import Alignment
 from aiogram.types import FSInputFile
+import gspread
+from google.oauth2.service_account import Credentials
 
 # Loglarni sozlash
 logging.basicConfig(level=logging.INFO)
 
 API_TOKEN = os.getenv("BOT_TOKEN")
-GOOGLE_SHEET_URL = os.getenv("GOOGLE_SHEET_URL", "https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYIUn0/edit")
-
 if not API_TOKEN:
     raise ValueError("Xatolik: BOT_TOKEN topilmadi! Render sozlamalarini tekshiring.")
 
@@ -27,7 +27,6 @@ dp = Dispatcher(storage=MemoryStorage())
 
 # EXCELGA YOZISH TIZIMI
 EXCEL_FILE = "students.xlsx"
-
 
 def save_to_excel(data):
     if not os.path.exists(EXCEL_FILE):
@@ -80,35 +79,52 @@ def save_to_excel(data):
     wb.save(EXCEL_FILE)
 
 
-# XAVFSIZ GOOGLE SHEETS TIZIMI (FAQAT BERILGAN SERVIS POCHTA ORQALI ISHLAYDI)
+# 🌟 GOOGLE SHEETS TIZIMI (GSPREAD)
 async def save_to_google_sheets(data):
-    sana = datetime.now().strftime("%d.%m.%Y %H:%M")
-    courses_list = data.get("selected_courses", [])
-    courses_string = ", ".join([c.replace('\n', ' ') for c in courses_list])
-    
-    sheet_id = "1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYIUn0"
-    
-    payload = {
-        "sheet_id": sheet_id,
-        "sana": sana,
-        "name": data.get("name"),
-        "phone": data.get("phone"),
-        "parent_phone": data.get("parent_phone"),
-        "school": data.get("school"),
-        "grade": data.get("grade"),
-        "filial": data.get("filial"),
-        "time_pref": data.get("time_pref"),
-        "courses": courses_string
-    }
-    
-    # Mutlaqo himoyalangan, faqat siz ruxsat bergan maxfiy servis pochtasi bilan ishlaydigan API ko'prik
-    secure_bridge_url = "https://script.google.com/macros/s/AKfycbzE3Zf_wF8rXOnfUu7f8vGg7hN-gQ246f_API/exec"
     try:
-        async with ClientSession() as session:
-            async with session.post(secure_bridge_url, json=payload, timeout=12) as response:
-                pass
+        sana = datetime.now().strftime("%d.%m.%Y %H:%M")
+        courses_list = data.get("selected_courses", [])
+        courses_string = ", ".join([c.replace('\n', ' ') for c in courses_list])
+        
+        # Google Sheets ruxsatlarini olish
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        
+        # Render'dagi Environment Variable'dan JSON kalitni o'qiymiz
+        # Render'da GOOGLE_CREDS degan o'zgaruvchi ochib, ichiga json faylingizni matnini qo'yasiz
+        creds_json = os.getenv("GOOGLE_CREDS")
+        
+        if creds_json:
+            import json
+            creds_data = json.loads(creds_json)
+            creds = Credentials.from_service_account_info(creds_data, scopes=scopes)
+        else:
+            # Agar lokal kompyuterda ishlatayotgan bo'lsangiz, fayldan o'qiydi
+            creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
+            
+        client = gspread.authorize(creds)
+        
+        # Jadval ID raqami (Siz yuborgan ID)
+        sheet_id = "1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYIUn0"
+        sheet = client.open_by_key(sheet_id).sheet1
+        
+        # Jadvalga yangi qator qo'shish
+        sheet.append_row([
+            sana,
+            data.get("name"),
+            data.get("phone"),
+            data.get("parent_phone"),
+            data.get("school"),
+            data.get("grade"),
+            data.get("filial"),
+            data.get("time_pref"),
+            courses_string
+        ])
+        logging.info("Ma'lumotlar Google Sheets'ga muvaffaqiyatli yozildi!")
     except Exception as e:
-        logging.error(f"Google Sheets xavfsiz ulanish xatosi: {e}")
+        logging.error(f"Google Sheets yozishda xato: {e}")
 
 
 # --- RO'YXATDAN O'TISH HOLATLARI ---
@@ -122,8 +138,6 @@ class Registration(StatesGroup):
     subjects = State()
     time_pref = State()
 
-
-# --- AKADEMIYA ASOSIY MA'LUMOTLARI ---
 AVAILABLE_FILIALS = ["Angren", "Ohangaron"]
 AVAILABLE_TIMES = ["Ertalabki", "Kunduzgi", "Kechki"]
 AVAILABLE_SUBJECTS = [
@@ -157,7 +171,7 @@ def get_main_menu():
 async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer(
-        "✨ **Angren Akademiyasi** rasmiy botiga xush kelibsiz! \n\n"
+        "✨ Angren Akademiyasi rasmiy botiga xush kelibsiz! \n\n"
         "Kelajak akademiyasida o'z bilimingizni va farzandingiz kamolotini nazorat qiling.",
         reply_markup=get_main_menu()
     )
@@ -176,13 +190,12 @@ async def send_excel(message: types.Message):
 async def check_knowledge(message: types.Message):
     await message.answer(
         "📊 **\"Angren Akademiya\" — Bilim Nazorati Tizimi**\n\n"
-        "✨ **Yaqin kunlarda hammasi yanada mukammal boʻladi!**\n\n"
-        "Kelajakda farzandingiz bizning **\"Angren Akademiya\"** oʻquv markazimizni tanlaganda, "
+        "✨ Yaqin kunlarda hammasi yanada mukammal boʻladi!\n\n"
+        "Kelajakda farzandingiz bizning **\"Angren Akademiya\" oʻquv markazimizni tanlaganda, "
         "ushbu tugma orqali har bir ota-ona aynan oʻz farzandining ismi, darsdagi ishtiroki va "
         "haqiqiy imtihon natijalari bilan muntazam tanishib borish imkoniyatiga ega boʻladi.\n\n"
         "🚀 *Biz kelajak texnologiyalarini taʼlimga olib kirmoqdamiz!*"
     )
-
 
 @dp.message(F.text == "🚪 Davomat (Keldim/Ketdim)")
 async def attendance_menu(message: types.Message):
@@ -193,7 +206,7 @@ async def attendance_menu(message: types.Message):
     kb.button(text="🚀 Uzoq muddatli imtiyozlar", callback_data="attendance_promo") 
     kb.adjust(2, 1, 1)
     await message.answer(
-        "🚪 **Angren Akademiyasi — Davomat va Shaxsiy Balans**\n\nKerakli tugmani bosing:",
+        "🚪 Angren Akademiyasi — Davomat va Shaxsiy Balans**\n\nKerakli tugmani bosing:",
         reply_markup=kb.as_markup()
     )
 
@@ -204,9 +217,9 @@ async def process_attendance(callback: types.CallbackQuery):
     current_time = datetime.now().strftime("%H:%M")
     
     if action == "in":
-        await callback.message.answer(f"🔔 **Angren Akademiya Xabarnomasi**\n\nFarzandingiz soat **{current_time}** da markazimizga eson-omon yetib keldi. 🔬")
+        await callback.message.answer(f"🔔 Angren Akademiya Xabarnomasi\n\nFarzandingiz soat {current_time} da markazimizga eson-omon yetib keldi. 🔬")
     elif action == "out":
-        await callback.message.answer(f"🔕 **Angren Akademiya Xabarnomasi**\n\nFarzandingiz soat **{current_time}** da darsdan chiqdi. Oq yo'l! ☀️")
+        await callback.message.answer(f"🔕 Angren Akademiya Xabarnomasi\n\nFarzandingiz soat {current_time} da darsdan chiqdi. Oq yo'l! ☀️")
     elif action == "pay":
         pay_kb = InlineKeyboardBuilder()
         pay_kb.button(text="💳 Plastik (Click/Payme)", callback_data="pay_via_card")
@@ -215,7 +228,7 @@ async def process_attendance(callback: types.CallbackQuery):
         await callback.message.answer("💰 **To'lov usulini tanlang:**", reply_markup=pay_kb.as_markup())
     elif action == "promo":
         await callback.message.answer(
-            "🚀 **\"Angren Akademiya\" Premium Imtiyozlar:**\n\n"
+            "🚀 \"Angren Akademiya\" Premium Imtiyozlar:**\n\n"
             "🥈 3 Oylik: 10% chegirma + sovg'a daftar 🎁\n"
             "🥇 6 Oylik: 15% chegirma + futbolka va kepka 👕\n"
             "👑 1 Yillik: 20% chegirma + darsliklar bepul 📚"
@@ -230,7 +243,7 @@ async def method_payment(callback: types.CallbackQuery):
     karta_egasi = os.getenv("KARTA_EGASI", "Angren Akademiya Mas'ul Xodimi")
     
     if method == "card":
-        await callback.message.answer(f"💳 **Karta raqami:** `{karta_raqam}`\n**Ega:** {karta_egasi}\n\nChekni adminga yuboring.")
+        await callback.message.answer(f"💳 **Karta raqami:** {karta_raqam}\n**Ega:** {karta_egasi}\n\nChekni adminga yuboring.")
     else:
         await callback.message.answer("💵 To'lovni administratorga topshiring. Rahmat!")
     await callback.answer()
@@ -270,7 +283,6 @@ async def process_school(message: types.Message, state: FSMContext):
     await message.answer("🎓 Nechanchi sinfda o'qiysiz?")
     await state.set_state(Registration.grade)
 
-
 @dp.message(Registration.grade)
 async def process_grade(message: types.Message, state: FSMContext):
     await state.update_data(grade=message.text)
@@ -308,7 +320,6 @@ async def show_subjects_keyboard(message: types.Message, selected_courses: list)
         await message.answer(text, reply_markup=kb.as_markup())
     else:
         await message.message.edit_text(text, reply_markup=kb.as_markup())
-
 
 @dp.callback_query(Registration.subjects, F.data.startswith("sub_"))
 async def process_subjects(callback: types.CallbackQuery, state: FSMContext):
@@ -357,7 +368,7 @@ async def process_time_pref(message: types.Message, state: FSMContext):
     courses_output = "📚 Tanlangan kurslar:\n" + "".join([f"• {c.replace('\n', ' ')}\n" for c in selected_courses])
 
     student_report = (
-        f"🎉 **Muvaffaqiyatli ro'yxatdan o'tdingiz!**\n\n"
+        f"🎉 Muvaffaqiyatli ro'yxatdan o'tdingiz!\n\n"
         f"👤 O'quvchi: {user_data.get('name')}\n"
         f"🏫 Maktab/Sinf: {user_data.get('school')}, {user_data.get('grade')}\n"
         f"📍 Filial: {user_data.get('filial')} | 🕒 Smena: {user_data.get('time_pref')}\n\n"
