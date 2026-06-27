@@ -41,7 +41,7 @@ def save_to_excel(data):
     sana = datetime.now().strftime("%d.%m.%Y %H:%M")
     
     courses_list = data.get("selected_courses", [])
-    courses_string = "\n".join([f"• {c.replace('\n', ' ')}" for c in courses_list])
+    courses_string = "\n".join(f"• {c.replace(chr(10), ' ')}" for c in courses_list)
     
     ws.append([
         sana,
@@ -80,45 +80,64 @@ def save_to_excel(data):
 
 
 # 🌟 GOOGLE SHEETS TIZIMI (GSPREAD)
+def _write_to_google_sheets_sync(data):
+    """Bu funksiya bloklovchi (sync) — shuning uchun alohida thread'da ishlatiladi."""
+    sana = datetime.now().strftime("%d.%m.%Y %H:%M")
+    courses_list = data.get("selected_courses", [])
+    courses_string = ", ".join([c.replace('\n', ' ') for c in courses_list])
+
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+
+    creds_json = os.getenv("GOOGLE_CREDS")
+
+    if creds_json:
+        import json
+        creds_data = json.loads(creds_json)
+        creds = Credentials.from_service_account_info(creds_data, scopes=scopes)
+    else:
+        creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
+
+    client = gspread.authorize(creds)
+
+    # URL orqali ulandik
+    sheet = client.open_by_url(
+        "https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYlUn0/edit"
+    ).sheet1
+
+    sheet.append_row([
+        sana,
+        data.get("name"),
+        data.get("phone"),
+        data.get("parent_phone"),
+        data.get("school"),
+        data.get("grade"),
+        data.get("filial"),
+        data.get("time_pref"),
+        courses_string
+    ])
+
+
 async def save_to_google_sheets(data):
     try:
-        sana = datetime.now().strftime("%d.%m.%Y %H:%M")
-        courses_list = data.get("selected_courses", [])
-        courses_string = ", ".join([c.replace('\n', ' ') for c in courses_list])
-        
-        scopes = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
-        
-        creds_json = os.getenv("GOOGLE_CREDS")
-        
-        if creds_json:
-            import json
-            creds_data = json.loads(creds_json)
-            creds = Credentials.from_service_account_info(creds_data, scopes=scopes)
-        else:
-            creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
-            
-        client = gspread.authorize(creds)
-        
-        # URL orqali ulandik
-        sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYlUn0/edit").sheet1
-        
-        sheet.append_row([
-            sana,
-            data.get("name"),
-            data.get("phone"),
-            data.get("parent_phone"),
-            data.get("school"),
-            data.get("grade"),
-            data.get("filial"),
-            data.get("time_pref"),
-            courses_string
-        ])
+        # gspread bloklovchi (sync) kutubxona — uni alohida thread'da ishga
+        # tushiramiz, shunda bot boshqa xabarlarga javob berishni to'xtatmaydi.
+        await asyncio.to_thread(_write_to_google_sheets_sync, data)
         logging.info("Ma'lumotlar Google Sheets'ga muvaffaqiyatli yozildi!")
     except Exception as e:
-        logging.error(f"Google Sheets yozishda xato: {e}")
+        # To'liq traceback'ni logga yozamiz — aniq sababni topish uchun shu MUHIM
+        logging.exception("Google Sheets yozishda xato:")
+        admin_id = os.getenv("ADMIN_ID")
+        if admin_id:
+            try:
+                await bot.send_message(
+                    int(admin_id),
+                    f"⚠️ Google Sheets'ga yozishda xato:\n\n{type(e).__name__}: {e}"
+                )
+            except Exception:
+                pass
 
 
 # --- RO'YXATDAN O'TISH HOLATLARI ---
@@ -308,7 +327,7 @@ async def show_subjects_keyboard(message: types.Message, selected_courses: list)
     
     text = "📚 **Kurslarni tanlang:**\n\n"
     if selected_courses:
-        text += "Tanlanganlar:\n" + "\n".join([f"- {c.replace('\n', ' ')}" for c in selected_courses])
+        text += "Tanlanganlar:\n" + "\n".join(f"- {c.replace(chr(10), ' ')}" for c in selected_courses)
         
     if isinstance(message, types.Message):
         await message.answer(text, reply_markup=kb.as_markup())
@@ -347,6 +366,17 @@ async def process_subjects(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+def escape_markdown(text):
+    """Foydalanuvchi yozgan matndagi Markdown uchun xavfli belgilarni
+    backslash bilan himoyalaydi, shunda Telegram entity xatosi bermaydi."""
+    if text is None:
+        return ""
+    text = str(text)
+    for ch in ("_", "*", "`", "["):
+        text = text.replace(ch, "\\" + ch)
+    return text
+
+
 @dp.message(Registration.time_pref)
 async def process_time_pref(message: types.Message, state: FSMContext):
     if message.text not in AVAILABLE_TIMES:
@@ -359,14 +389,14 @@ async def process_time_pref(message: types.Message, state: FSMContext):
     asyncio.create_task(save_to_google_sheets(user_data))
     
     selected_courses = user_data.get("selected_courses", [])
-    courses_output = "📚 Tanlangan kurslar:\n" + "".join([f"• {c.replace('\n', ' ')}\n" for c in selected_courses])
+    courses_output = "📚 Tanlangan kurslar:\n" + "".join(f"• {c.replace(chr(10), ' ')}\n" for c in selected_courses)
 
     # BU YERDA 'f' HARFI QOLIB KETGAN EKAN, TUZATILDI
     student_report = (
         f"🎉 Muvaffaqiyatli ro'yxatdan o'tdingiz!\n\n"
-        f"👤 O'quvchi: {user_data.get('name')}\n"
-        f"🏫 Maktab/Sinf: {user_data.get('school')}, {user_data.get('grade')}\n"
-        f"📍 Filial: {user_data.get('filial')} | 🕒 Smena: {user_data.get('time_pref')}\n\n"
+        f"👤 O'quvchi: {escape_markdown(user_data.get('name'))}\n"
+        f"🏫 Maktab/Sinf: {escape_markdown(user_data.get('school'))}, {escape_markdown(user_data.get('grade'))}\n"
+        f"📍 Filial: {escape_markdown(user_data.get('filial'))} | 🕒 Smena: {escape_markdown(user_data.get('time_pref'))}\n\n"
         f"{courses_output}\n"
         f"📞 +998 94 041 42 55\n📞 +998 93 101 58 70"
     )
@@ -377,7 +407,7 @@ async def process_time_pref(message: types.Message, state: FSMContext):
             photo = FSInputFile("IMG_20260619_235730_628.jpg")
             await message.answer_photo(photo=photo, caption=student_report, parse_mode="Markdown", reply_markup=get_main_menu())
         except Exception as e:
-            logging.error(f"Rasm yuborishda xato: {e}")
+            logging.exception("Rasm yuborishda xato:")
             await message.answer(text=student_report, parse_mode="Markdown", reply_markup=get_main_menu())
     else:
         await message.answer(text=student_report, parse_mode="Markdown", reply_markup=get_main_menu())
