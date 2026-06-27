@@ -86,14 +86,11 @@ async def save_to_google_sheets(data):
         courses_list = data.get("selected_courses", [])
         courses_string = ", ".join([c.replace('\n', ' ') for c in courses_list])
         
-        # Google Sheets ruxsatlarini olish
         scopes = [
             "https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive"
         ]
         
-        # Render'dagi Environment Variable'dan JSON kalitni o'qiymiz
-        # Render'da GOOGLE_CREDS degan o'zgaruvchi ochib, ichiga json faylingizni matnini qo'yasiz
         creds_json = os.getenv("GOOGLE_CREDS")
         
         if creds_json:
@@ -101,16 +98,13 @@ async def save_to_google_sheets(data):
             creds_data = json.loads(creds_json)
             creds = Credentials.from_service_account_info(creds_data, scopes=scopes)
         else:
-            # Agar lokal kompyuterda ishlatayotgan bo'lsangiz, fayldan o'qiydi
             creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
             
         client = gspread.authorize(creds)
         
-        # Jadval ID raqami (Siz yuborgan ID)
-        sheet_id = "1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYIUn0"
-        sheet = client.open_by_key(sheet_id).sheet1
+        # URL TO'G'RIDAN-TO'G'RI BILAN BOG'LANDI - RENDERDAGI ESKI MANZIL ENDI XALQIT BERMAYDI
+        sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYlUn0/edit").sheet1
         
-        # Jadvalga yangi qator qo'shish
         sheet.append_row([
             sana,
             data.get("name"),
@@ -369,7 +363,7 @@ async def process_time_pref(message: types.Message, state: FSMContext):
 
     student_report = (
         f"🎉 Muvaffaqiyatli ro'yxatdan o'tdingiz!\n\n"
-        f"👤 O'quvchi: {user_data.get('name')}\n"
+        "👤 O'quvchi: {user_data.get('name')}\n"
         f"🏫 Maktab/Sinf: {user_data.get('school')}, {user_data.get('grade')}\n"
         f"📍 Filial: {user_data.get('filial')} | 🕒 Smena: {user_data.get('time_pref')}\n\n"
         f"{courses_output}\n"
