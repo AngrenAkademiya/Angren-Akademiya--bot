@@ -79,9 +79,9 @@ def save_to_excel(data):
     wb.save(EXCEL_FILE)
 
 
-# 🌟 GOOGLE SHEETS TIZIMI (GSPREAD)
+# 🌟 GOOGLE SHEETS TIZIMI (GSPREAD) - MUSTAQIL VA XATOSIZ VARIANT
 def _write_to_google_sheets_sync(data):
-    """Bu funksiya bloklovchi (sync) — shuning uchun alohida thread'da ishlatiladi."""
+    """Bu funksiya Render paneli xato saqlayotgani uchun to'g'ridan-to'g'ri to'g'ri ID ga ulanadi."""
     sana = datetime.now().strftime("%d.%m.%Y %H:%M")
     courses_list = data.get("selected_courses", [])
     courses_string = ", ".join([c.replace('\n', ' ') for c in courses_list])
@@ -102,10 +102,17 @@ def _write_to_google_sheets_sync(data):
 
     client = gspread.authorize(creds)
 
-    # URL orqali ulandik
-    sheet = client.open_by_url(
-        "https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYlUn0/edit"
-    ).sheet1
+    # Render o'zgaruvchilarini chetlab o'tib, katta 'I' harfli eng to'g'ri havola qo'yildi
+    TO_G_URL = "https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYIUn0/edit"
+    spreadsheet = client.open_by_url(TO_G_URL)
+    
+    try:
+        sheet = spreadsheet.worksheet("Varaq1")
+    except gspread.exceptions.WorksheetNotFound:
+        sheet = spreadsheet.sheet1
+
+    if not sheet.get_all_values():
+        sheet.append_row(["Sana", "Ism Familiya", "Tel Raqam", "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar"])
 
     sheet.append_row([
         sana,
@@ -122,12 +129,9 @@ def _write_to_google_sheets_sync(data):
 
 async def save_to_google_sheets(data):
     try:
-        # gspread bloklovchi (sync) kutubxona — uni alohida thread'da ishga
-        # tushiramiz, shunda bot boshqa xabarlarga javob berishni to'xtatmaydi.
         await asyncio.to_thread(_write_to_google_sheets_sync, data)
         logging.info("Ma'lumotlar Google Sheets'ga muvaffaqiyatli yozildi!")
     except Exception as e:
-        # To'liq traceback'ni logga yozamiz — aniq sababni topish uchun shu MUHIM
         logging.exception("Google Sheets yozishda xato:")
         admin_id = os.getenv("ADMIN_ID")
         if admin_id:
@@ -184,7 +188,7 @@ def get_main_menu():
 async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer(
-        "✨ Angren Akademiyasi rasmiy botiga xush kelibsiz! \n\n"
+        "✨ Angren Akademiyesi rasmiy botiga xush kelibsiz! \n\n"
         "Kelajak akademiyasida o'z bilimingizni va farzandingiz kamolotini nazorat qiling.",
         reply_markup=get_main_menu()
     )
@@ -219,7 +223,7 @@ async def attendance_menu(message: types.Message):
     kb.button(text="🚀 Uzoq muddatli imtiyozlar", callback_data="attendance_promo") 
     kb.adjust(2, 1, 1)
     await message.answer(
-        "🚪 Angren Akademiyasi — Davomat va Shaxsiy Balans**\n\nKerakli tugmani bosing:",
+        "🚪 Angren Akademiyesi — Davomat va Shaxsiy Balans**\n\nKerakli tugmani bosing:",
         reply_markup=kb.as_markup()
     )
 
@@ -367,8 +371,6 @@ async def process_subjects(callback: types.CallbackQuery, state: FSMContext):
 
 
 def escape_markdown(text):
-    """Foydalanuvchi yozgan matndagi Markdown uchun xavfli belgilarni
-    backslash bilan himoyalaydi, shunda Telegram entity xatosi bermaydi."""
     if text is None:
         return ""
     text = str(text)
@@ -391,7 +393,6 @@ async def process_time_pref(message: types.Message, state: FSMContext):
     selected_courses = user_data.get("selected_courses", [])
     courses_output = "📚 Tanlangan kurslar:\n" + "".join(f"• {c.replace(chr(10), ' ')}\n" for c in selected_courses)
 
-    # BU YERDA 'f' HARFI QOLIB KETGAN EKAN, TUZATILDI
     student_report = (
         f"🎉 Muvaffaqiyatli ro'yxatdan o'tdingiz!\n\n"
         f"👤 O'quvchi: {escape_markdown(user_data.get('name'))}\n"
