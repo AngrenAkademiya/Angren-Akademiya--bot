@@ -102,7 +102,7 @@ async def save_to_google_sheets(data):
             
         client = gspread.authorize(creds)
         
-        # URL TO'G'RIDAN-TO'G'RI BILAN BOG'LANDI - RENDERDAGI ESKI MANZIL ENDI XALQIT BERMAYDI
+        # URL orqali ulandik
         sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYlUn0/edit").sheet1
         
         sheet.append_row([
@@ -361,9 +361,10 @@ async def process_time_pref(message: types.Message, state: FSMContext):
     selected_courses = user_data.get("selected_courses", [])
     courses_output = "📚 Tanlangan kurslar:\n" + "".join([f"• {c.replace('\n', ' ')}\n" for c in selected_courses])
 
+    # BU YERDA 'f' HARFI QOLIB KETGAN EKAN, TUZATILDI
     student_report = (
         f"🎉 Muvaffaqiyatli ro'yxatdan o'tdingiz!\n\n"
-        "👤 O'quvchi: {user_data.get('name')}\n"
+        f"👤 O'quvchi: {user_data.get('name')}\n"
         f"🏫 Maktab/Sinf: {user_data.get('school')}, {user_data.get('grade')}\n"
         f"📍 Filial: {user_data.get('filial')} | 🕒 Smena: {user_data.get('time_pref')}\n\n"
         f"{courses_output}\n"
