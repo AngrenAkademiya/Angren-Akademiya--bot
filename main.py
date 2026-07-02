@@ -80,7 +80,7 @@ def save_to_excel(data):
     wb.save(EXCEL_FILE)
 
 
-# GOOGLE SHEETS TIZIMI (GSPREAD)
+# GOOGLE SHEETS TIZIMI
 def _write_to_google_sheets_sync(data):
     sana = datetime.now().strftime("%d.%m.%Y %H:%M")
     courses_list = data.get("selected_courses", [])
@@ -155,14 +155,16 @@ class Registration(StatesGroup):
 
 AVAILABLE_FILIALS = ["Angren", "Ohangaron"]
 AVAILABLE_TIMES = ["Ertalabki", "Kunduzgi", "Kechki"]
+
+# Shifokorlik kasbini tanlaganlar uchun yo'nalishlar to'liq yozildi
 AVAILABLE_SUBJECTS = [
     "Matematika - Milliy va xalqaro sertifikat",
     "Matematika - majburiy blok ucun",
     "Ingliz tili - ILTES",
-    "Tibbiyot - shifokorlik kasblari uchun Kimyo",
+    "Tibbiyot - shifokorlik kasblari uchun\nKimyo - Milliy va xalqaro sertifikat",
     "Prezident maktablariga tayyorlov",
     "Al-Xorazmiy maktablariga tayyorlov",
-    "Tibbiyot-shifokorlik kasbini tanlaganlar uchun biologiya",
+    "Tibbiyot-shifokorlik kasbini tanlaganlar uchun-\nbiologiya - Milliy va xalqaro sertifikat",
     "Tarix- Milliy sertifikat",
     "Tarix -Majburiy blok uchun",
     "Huquq-Milliy sertifikat",
@@ -319,7 +321,8 @@ async def show_subjects_keyboard(message: types.Message, selected_courses: list)
     kb = InlineKeyboardBuilder()
     for idx, subject in enumerate(AVAILABLE_SUBJECTS):
         status = "✅" if subject in selected_courses else ""
-        kb.button(text=f"{subject} {status}", callback_data=f"sub_{idx}")
+        # Tugmadagi matnda qator ajratish chiroyli chiqishi uchun optimizatsiya qilindi
+        kb.button(text=f"{subject.replace(chr(10), ' ')} {status}", callback_data=f"sub_{idx}")
     kb.button(text="➡️ Davom etish", callback_data="sub_done")
     kb.adjust(1)
     
@@ -393,7 +396,9 @@ async def process_time_pref(message: types.Message, state: FSMContext):
         f"🏫 Maktab/Sinf: {escape_markdown(user_data.get('school'))}, {escape_markdown(user_data.get('grade'))}\n"
         f"📍 Filial: {escape_markdown(user_data.get('filial'))} | 🕒 Smena: {escape_markdown(user_data.get('time_pref'))}\n\n"
         f"{courses_output}\n"
-        f"📞 +998 94 041 42 55\n📞 +998 93 101 58 70"
+        f"📞 *Biz bilan bog'lanish uchun:*\n"
+        f"➕998 94 041 42 55\n"
+        f"➕998 93 101 58 70"
     )
 
     is_medical = any("Tibbiyot" in course for course in selected_courses)
