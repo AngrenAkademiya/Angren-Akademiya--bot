@@ -101,9 +101,9 @@ def _write_to_google_sheets_sync(data):
 
     client = gspread.authorize(creds)
 
-    TO_G_URL = "https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYIUn0/edit"
-    spreadsheet = client.open_by_url(TO_G_URL)
-    
+    import os
+SPREADSHEET_ID = os.getenv("SPREADSHEET_ID", "1IMygjA0hB6yBIJBrwWENxhZDGtRdxH9Eqz3fOAzF8Oc")
+sh = gc.open_by_key(SPREADSHEET_ID)
     try:
         sheet = spreadsheet.worksheet("Varaq1")
     except gspread.exceptions.WorksheetNotFound:
