@@ -1,7 +1,8 @@
-[02.07.2026 13:57] Yulduzoy Xudoyorova: import os
+import os
 import logging
 from datetime import datetime
 import asyncio
+import json
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
@@ -79,9 +80,8 @@ def save_to_excel(data):
     wb.save(EXCEL_FILE)
 
 
-# 🌟 GOOGLE SHEETS TIZIMI (GSPREAD) - MUSTAQIL VA XATOSIZ VARIANT
+# GOOGLE SHEETS TIZIMI (GSPREAD)
 def _write_to_google_sheets_sync(data):
-    """Bu funksiya Render paneli xato saqlayotgani uchun to'g'ridan-to'g'ri to'g'ri ID ga ulanadi."""
     sana = datetime.now().strftime("%d.%m.%Y %H:%M")
     courses_list = data.get("selected_courses", [])
     courses_string = ", ".join([c.replace('\n', ' ') for c in courses_list])
@@ -94,7 +94,6 @@ def _write_to_google_sheets_sync(data):
     creds_json = os.getenv("GOOGLE_CREDS")
 
     if creds_json:
-        import json
         creds_data = json.loads(creds_json)
         creds = Credentials.from_service_account_info(creds_data, scopes=scopes)
     else:
@@ -102,8 +101,7 @@ def _write_to_google_sheets_sync(data):
 
     client = gspread.authorize(creds)
 
-    # URL manzil o'zgartirildi
-    TO_G_URL = "https://docs.google.com/spreadsheets/d/11MygjA0hB6yBIJBrwWENxhZDGtRdxH9Eqz3fOAzF8Oc/edit"
+    TO_G_URL = "https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYIUn0/edit"
     spreadsheet = client.open_by_url(TO_G_URL)
     
     try:
@@ -113,7 +111,8 @@ def _write_to_google_sheets_sync(data):
 
     if not sheet.get_all_values():
         sheet.append_row(["Sana", "Ism Familiya", "Tel Raqam", "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar"])
-[02.07.2026 13:57] Yulduzoy Xudoyorova: sheet.append_row([
+
+    sheet.append_row([
         sana,
         data.get("name"),
         data.get("phone"),
@@ -137,7 +136,7 @@ async def save_to_google_sheets(data):
             try:
                 await bot.send_message(
                     int(admin_id),
-                    f"⚠️ Google Sheets'ga yozishda xato:\n\n{type(e).name}: {e}"
+                    f"⚠️ Google Sheets'ga yozishda xato:\n\n{type(e).__name__}: {e}"
                 )
             except Exception:
                 pass
@@ -160,13 +159,13 @@ AVAILABLE_SUBJECTS = [
     "Matematika - Milliy va xalqaro sertifikat",
     "Matematika - majburiy blok ucun",
     "Ingliz tili - ILTES",
-    "Tibbiyot - shifokorlik kasblari uchun\nKimyo - Milliy va xalqaro sertifikat",
+    "Tibbiyot - shifokorlik kasblari uchun Kimyo",
     "Prezident maktablariga tayyorlov",
     "Al-Xorazmiy maktablariga tayyorlov",
-    "Tibbiyot-shifokorlik kasbini tanlaganlar uchun-\nbiologiya - Milliy va xalqaro sertifikat",
+    "Tibbiyot-shifokorlik kasbini tanlaganlar uchun biologiya",
     "Tarix- Milliy sertifikat",
     "Tarix -Majburiy blok uchun",
-    "Huqu-Milliy sertifikat",
+    "Huquq-Milliy sertifikat",
     "IT- Milliy v xalaro sertifikat",
     "Ona tili va adabiyoti -Milliy sertifikat",
     "Ona tili va adabiyoti -Majburiy blok uchun",
@@ -217,14 +216,13 @@ async def attendance_menu(message: types.Message):
     kb = InlineKeyboardBuilder()
     kb.button(text="🔔 Keldim", callback_data="attendance_in")
     kb.button(text="🔕 Ketdim", callback_data="attendance_out")
-    kb.button(text="💰 Oylik to'lov holati", callback_data="attendance_pay")
-[02.07.2026 13:57] Yulduzoy Xudoyorova: kb.button(text="🚀 Uzoq muddatli imtiyozlar", callback_data="attendance_promo") 
+    kb.button(text="💰 Oylik to'lov holati", callback_data="attendance_pay") 
+    kb.button(text="🚀 Uzoq muddatli imtiyozlar", callback_data="attendance_promo") 
     kb.adjust(2, 1, 1)
     await message.answer(
         "🚪 Angren Akademiyesi — Davomat va Shaxsiy Balans**\n\nKerakli tugmani bosing:",
         reply_markup=kb.as_markup()
     )
-
 
 @dp.callback_query(F.data.startswith("attendance_"))
 async def process_attendance(callback: types.CallbackQuery):
@@ -240,7 +238,7 @@ async def process_attendance(callback: types.CallbackQuery):
         pay_kb.button(text="💳 Plastik (Click/Payme)", callback_data="pay_via_card")
         pay_kb.button(text="💵 Naqd pul (Qo'lda)", callback_data="pay_via_cash")
         pay_kb.adjust(1)
-        await callback.message.answer("💰 **To'lov usulini tanlang:", reply_markup=pay_kb.as_markup())
+        await callback.message.answer("💰 To'lov usulini tanlang:", reply_markup=pay_kb.as_markup())
     elif action == "promo":
         await callback.message.answer(
             "🚀 \"Angren Akademiya\" Premium Imtiyozlar:\n\n"
@@ -258,7 +256,7 @@ async def method_payment(callback: types.CallbackQuery):
     karta_egasi = os.getenv("KARTA_EGASI", "Angren Akademiya Mas'ul Xodimi")
     
     if method == "card":
-        await callback.message.answer(f"💳 Karta raqami: {karta_raqam}\nEga:** {karta_egasi}\n\nChekni adminga yuboring.")
+        await callback.message.answer(f"💳 Karta raqami: {karta_raqam}\nEga: {karta_egasi}\n\nChekni adminga yuboring.")
     else:
         await callback.message.answer("💵 To'lovni administratorga topshiring. Rahmat!")
     await callback.answer()
@@ -306,7 +304,9 @@ async def process_grade(message: types.Message, state: FSMContext):
     kb.adjust(2)
     await message.answer("📍 Filialni tanlang:", reply_markup=kb.as_markup(resize_keyboard=True))
     await state.set_state(Registration.filial)
-[02.07.2026 13:57] Yulduzoy Xudoyorova: @dp.message(Registration.filial)
+
+
+@dp.message(Registration.filial)
 async def process_filial(message: types.Message, state: FSMContext):
     if message.text not in AVAILABLE_FILIALS:
         await message.answer("Tugmalardan birini bosing!")
@@ -314,7 +314,6 @@ async def process_filial(message: types.Message, state: FSMContext):
     await state.update_data(filial=message.text, selected_courses=[])
     await show_subjects_keyboard(message, [])
     await state.set_state(Registration.subjects)
-
 
 async def show_subjects_keyboard(message: types.Message, selected_courses: list):
     kb = InlineKeyboardBuilder()
@@ -402,7 +401,7 @@ async def process_time_pref(message: types.Message, state: FSMContext):
         try:
             photo = FSInputFile("IMG_20260619_235730_628.jpg")
             await message.answer_photo(photo=photo, caption=student_report, parse_mode="Markdown", reply_markup=get_main_menu())
-[02.07.2026 13:57] Yulduzoy Xudoyorova: except Exception as e:
+        except Exception as e:
             logging.exception("Rasm yuborishda xato:")
             await message.answer(text=student_report, parse_mode="Markdown", reply_markup=get_main_menu())
     else:
@@ -413,7 +412,6 @@ async def process_time_pref(message: types.Message, state: FSMContext):
 # --- RENDER PORTI ---
 async def handle_health(request):
     return web.Response(text="Angren Akademiya boti faol!")
-
 
 async def start_web_server():
     app = web.Application()
