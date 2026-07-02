@@ -1,4 +1,4 @@
-import os
+[02.07.2026 13:38] Yulduzoy Xudoyorova: import os
 import logging
 from datetime import datetime
 import asyncio
@@ -102,8 +102,8 @@ def _write_to_google_sheets_sync(data):
 
     client = gspread.authorize(creds)
 
-    # Render o'zgaruvchilarini chetlab o'tib, katta 'I' harfli eng to'g'ri havola qo'yildi
-    TO_G_URL = "https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYIUn0/edit"
+    # URL manzil o'zgartirildi
+    TO_G_URL = "https://docs.google.com/spreadsheets/d/11MygjA0hB6yBIJBrwWENxhZDGtRdxH9Eqz3fOAzF8Oc/edit"
     spreadsheet = client.open_by_url(TO_G_URL)
     
     try:
@@ -113,8 +113,7 @@ def _write_to_google_sheets_sync(data):
 
     if not sheet.get_all_values():
         sheet.append_row(["Sana", "Ism Familiya", "Tel Raqam", "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar"])
-
-    sheet.append_row([
+[02.07.2026 13:38] Yulduzoy Xudoyorova: sheet.append_row([
         sana,
         data.get("name"),
         data.get("phone"),
@@ -138,7 +137,7 @@ async def save_to_google_sheets(data):
             try:
                 await bot.send_message(
                     int(admin_id),
-                    f"⚠️ Google Sheets'ga yozishda xato:\n\n{type(e).__name__}: {e}"
+                    f"⚠️ Google Sheets'ga yozishda xato:\n\n{type(e).name}: {e}"
                 )
             except Exception:
                 pass
@@ -202,11 +201,10 @@ async def send_excel(message: types.Message):
     else:
         await message.answer("❌ Hozircha ro'yxat bo'sh! Hech kim ro'yxatdan o'tmadi.")
 
-
 @dp.message(F.text == "📈 Bilim darajasini tekshirish")
 async def check_knowledge(message: types.Message):
     await message.answer(
-        "📊 **\"Angren Akademiya\" — Bilim Nazorati Tizimi**\n\n"
+        "📊 \"Angren Akademiya\" — Bilim Nazorati Tizimi**\n\n"
         "✨ Yaqin kunlarda hammasi yanada mukammal boʻladi!\n\n"
         "Kelajakda farzandingiz bizning **\"Angren Akademiya\" oʻquv markazimizni tanlaganda, "
         "ushbu tugma orqali har bir ota-ona aynan oʻz farzandining ismi, darsdagi ishtiroki va "
@@ -219,8 +217,8 @@ async def attendance_menu(message: types.Message):
     kb = InlineKeyboardBuilder()
     kb.button(text="🔔 Keldim", callback_data="attendance_in")
     kb.button(text="🔕 Ketdim", callback_data="attendance_out")
-    kb.button(text="💰 Oylik to'lov holati", callback_data="attendance_pay") 
-    kb.button(text="🚀 Uzoq muddatli imtiyozlar", callback_data="attendance_promo") 
+    kb.button(text="💰 Oylik to'lov holati", callback_data="attendance_pay")
+[02.07.2026 13:38] Yulduzoy Xudoyorova: kb.button(text="🚀 Uzoq muddatli imtiyozlar", callback_data="attendance_promo") 
     kb.adjust(2, 1, 1)
     await message.answer(
         "🚪 Angren Akademiyesi — Davomat va Shaxsiy Balans**\n\nKerakli tugmani bosing:",
@@ -242,10 +240,10 @@ async def process_attendance(callback: types.CallbackQuery):
         pay_kb.button(text="💳 Plastik (Click/Payme)", callback_data="pay_via_card")
         pay_kb.button(text="💵 Naqd pul (Qo'lda)", callback_data="pay_via_cash")
         pay_kb.adjust(1)
-        await callback.message.answer("💰 **To'lov usulini tanlang:**", reply_markup=pay_kb.as_markup())
+        await callback.message.answer("💰 **To'lov usulini tanlang:", reply_markup=pay_kb.as_markup())
     elif action == "promo":
         await callback.message.answer(
-            "🚀 \"Angren Akademiya\" Premium Imtiyozlar:**\n\n"
+            "🚀 \"Angren Akademiya\" Premium Imtiyozlar:\n\n"
             "🥈 3 Oylik: 10% chegirma + sovg'a daftar 🎁\n"
             "🥇 6 Oylik: 15% chegirma + futbolka va kepka 👕\n"
             "👑 1 Yillik: 20% chegirma + darsliklar bepul 📚"
@@ -260,7 +258,7 @@ async def method_payment(callback: types.CallbackQuery):
     karta_egasi = os.getenv("KARTA_EGASI", "Angren Akademiya Mas'ul Xodimi")
     
     if method == "card":
-        await callback.message.answer(f"💳 **Karta raqami:** {karta_raqam}\n**Ega:** {karta_egasi}\n\nChekni adminga yuboring.")
+        await callback.message.answer(f"💳 Karta raqami: {karta_raqam}\nEga:** {karta_egasi}\n\nChekni adminga yuboring.")
     else:
         await callback.message.answer("💵 To'lovni administratorga topshiring. Rahmat!")
     await callback.answer()
@@ -286,7 +284,6 @@ async def process_phone(message: types.Message, state: FSMContext):
     await message.answer("👨‍👩‍👦 Ota-onangizning telefon raqamini kiriting:")
     await state.set_state(Registration.parent_phone)
 
-
 @dp.message(Registration.parent_phone)
 async def process_parent_phone(message: types.Message, state: FSMContext):
     await state.update_data(parent_phone=message.text)
@@ -309,9 +306,7 @@ async def process_grade(message: types.Message, state: FSMContext):
     kb.adjust(2)
     await message.answer("📍 Filialni tanlang:", reply_markup=kb.as_markup(resize_keyboard=True))
     await state.set_state(Registration.filial)
-
-
-@dp.message(Registration.filial)
+[02.07.2026 13:38] Yulduzoy Xudoyorova: @dp.message(Registration.filial)
 async def process_filial(message: types.Message, state: FSMContext):
     if message.text not in AVAILABLE_FILIALS:
         await message.answer("Tugmalardan birini bosing!")
@@ -329,7 +324,7 @@ async def show_subjects_keyboard(message: types.Message, selected_courses: list)
     kb.button(text="➡️ Davom etish", callback_data="sub_done")
     kb.adjust(1)
     
-    text = "📚 **Kurslarni tanlang:**\n\n"
+    text = "📚 Kurslarni tanlang:\n\n"
     if selected_courses:
         text += "Tanlanganlar:\n" + "\n".join(f"- {c.replace(chr(10), ' ')}" for c in selected_courses)
         
@@ -407,7 +402,7 @@ async def process_time_pref(message: types.Message, state: FSMContext):
         try:
             photo = FSInputFile("IMG_20260619_235730_628.jpg")
             await message.answer_photo(photo=photo, caption=student_report, parse_mode="Markdown", reply_markup=get_main_menu())
-        except Exception as e:
+[02.07.2026 13:38] Yulduzoy Xudoyorova: except Exception as e:
             logging.exception("Rasm yuborishda xato:")
             await message.answer(text=student_report, parse_mode="Markdown", reply_markup=get_main_menu())
     else:
@@ -451,5 +446,5 @@ async def main():
     await dp.start_polling(bot)
 
 
-if __name__ == "__main__":
+if name == "main":
     asyncio.run(main())
