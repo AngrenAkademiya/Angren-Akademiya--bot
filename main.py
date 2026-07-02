@@ -1,4 +1,4 @@
-[02.07.2026 13:38] Yulduzoy Xudoyorova: import os
+[02.07.2026 13:57] Yulduzoy Xudoyorova: import os
 import logging
 from datetime import datetime
 import asyncio
@@ -113,7 +113,7 @@ def _write_to_google_sheets_sync(data):
 
     if not sheet.get_all_values():
         sheet.append_row(["Sana", "Ism Familiya", "Tel Raqam", "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar"])
-[02.07.2026 13:38] Yulduzoy Xudoyorova: sheet.append_row([
+[02.07.2026 13:57] Yulduzoy Xudoyorova: sheet.append_row([
         sana,
         data.get("name"),
         data.get("phone"),
@@ -218,7 +218,7 @@ async def attendance_menu(message: types.Message):
     kb.button(text="🔔 Keldim", callback_data="attendance_in")
     kb.button(text="🔕 Ketdim", callback_data="attendance_out")
     kb.button(text="💰 Oylik to'lov holati", callback_data="attendance_pay")
-[02.07.2026 13:38] Yulduzoy Xudoyorova: kb.button(text="🚀 Uzoq muddatli imtiyozlar", callback_data="attendance_promo") 
+[02.07.2026 13:57] Yulduzoy Xudoyorova: kb.button(text="🚀 Uzoq muddatli imtiyozlar", callback_data="attendance_promo") 
     kb.adjust(2, 1, 1)
     await message.answer(
         "🚪 Angren Akademiyesi — Davomat va Shaxsiy Balans**\n\nKerakli tugmani bosing:",
@@ -306,7 +306,7 @@ async def process_grade(message: types.Message, state: FSMContext):
     kb.adjust(2)
     await message.answer("📍 Filialni tanlang:", reply_markup=kb.as_markup(resize_keyboard=True))
     await state.set_state(Registration.filial)
-[02.07.2026 13:38] Yulduzoy Xudoyorova: @dp.message(Registration.filial)
+[02.07.2026 13:57] Yulduzoy Xudoyorova: @dp.message(Registration.filial)
 async def process_filial(message: types.Message, state: FSMContext):
     if message.text not in AVAILABLE_FILIALS:
         await message.answer("Tugmalardan birini bosing!")
@@ -402,7 +402,7 @@ async def process_time_pref(message: types.Message, state: FSMContext):
         try:
             photo = FSInputFile("IMG_20260619_235730_628.jpg")
             await message.answer_photo(photo=photo, caption=student_report, parse_mode="Markdown", reply_markup=get_main_menu())
-[02.07.2026 13:38] Yulduzoy Xudoyorova: except Exception as e:
+[02.07.2026 13:57] Yulduzoy Xudoyorova: except Exception as e:
             logging.exception("Rasm yuborishda xato:")
             await message.answer(text=student_report, parse_mode="Markdown", reply_markup=get_main_menu())
     else:
