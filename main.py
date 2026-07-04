@@ -105,15 +105,14 @@ def _write_to_google_sheets_sync(data):
 
     SPREADSHEET_ID = os.getenv("SPREADSHEET_ID", "1IMygjA0hB6yBIJBrwWENXhZDGtRdXH9Eqz3fOAzF8Oc")
     sh = client.open_by_key(SPREADSHEET_ID)
-    try:
     today = datetime.now().strftime("%d.%m.%Y")
     try:
         sheet = sh.worksheet(today)
     except gspread.exceptions.WorksheetNotFound:
         sheet = sh.add_worksheet(title=today, rows=1000, cols=10)
         sheet.append_row(["Sana", "Ism Familiya", "Tel Raqam",
-                      "Ota-ona Tel", "Maktab", "Sinf",
-                      "Filial", "Smena", "Kurslar"])
+                          "Ota-ona Tel", "Maktab", "Sinf",
+                          "Filial", "Smena", "Kurslar"])
 
     if not sheet.get_all_values():
         sheet.append_row(["Sana", "Ism Familiya", "Tel Raqam", "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar"])
