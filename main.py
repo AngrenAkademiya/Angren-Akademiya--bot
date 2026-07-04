@@ -114,8 +114,7 @@ def _write_to_google_sheets_sync(data):
                           "Ota-ona Tel", "Maktab", "Sinf",
                           "Filial", "Smena", "Kurslar"])
 
-    if not sheet.get_all_values():
-        sheet.append_row(["Sana", "Ism Familiya", "Tel Raqam", "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar"])
+    
 
     sheet.append_row([
         sana,
