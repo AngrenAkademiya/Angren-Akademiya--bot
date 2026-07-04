@@ -126,9 +126,9 @@ def _write_to_google_sheets_sync(data):
         data.get("filial"),
         data.get("time_pref"),
         courses_string
-    ])
-    # Ustun kengliklarini sozlash
-    set_column_widths = {
+        ])
+        # Ustun kengliklarini sozlash
+        set_column_widths = {
         "requests": [
             {"updateDimensionProperties": {"range": {"sheetId": sheet.id, "dimension": "COLUMNS", "startIndex": 0, "endIndex": 1}, "properties": {"pixelSize": 130}, "fields": "pixelSize"}},
             {"updateDimensionProperties": {"range": {"sheetId": sheet.id, "dimension": "COLUMNS", "startIndex": 1, "endIndex": 2}, "properties": {"pixelSize": 150}, "fields": "pixelSize"}},
