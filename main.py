@@ -103,7 +103,7 @@ def _write_to_google_sheets_sync(data):
     client = gspread.authorize(creds)
 
 
-    SPREADSHEET_ID = os.getenv("SPREADSHEET_ID", "1IMygjA0hB6yBIJBrwWENxhZDGtRdxH9Eqz3fOAzF8Oc")
+    SPREADSHEET_ID = os.getenv("SPREADSHEET_ID", "1IMygjA0hB6yBIJBrwWENxhZDGtRdXH9Eqz3fOAzF8Oc")
     sh = client.open_by_key(SPREADSHEET_ID)
     try:
         sheet = sh.worksheet("Varaq1")
