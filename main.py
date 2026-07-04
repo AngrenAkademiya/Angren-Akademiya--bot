@@ -81,53 +81,7 @@ def save_to_excel(data):
 
 
 # GOOGLE SHEETS TIZIMI
-def _write_to_google_sheets_sync(data):
-    sana = datetime.now().strftime("%d.%m.%Y %H:%M")
-    courses_list = data.get("selected_courses", [])
-    courses_string = ", ".join([c.replace('\n', ' ') for c in courses_list])
-
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
-    ]
-
-    import os
-    creds_json = os.getenv("GOOGLE_CREDS")
-
-    if creds_json:
-        creds_data = json.loads(creds_json)
-        creds = Credentials.from_service_account_info(creds_data, scopes=scopes)
-    else:
-        creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
-
-    client = gspread.authorize(creds)
-
-
-    SPREADSHEET_ID = os.getenv("SPREADSHEET_ID", "1IMygjA0hB6yBIJBrwWENXhZDGtRdXH9Eqz3fOAzF8Oc")
-    sh = client.open_by_key(SPREADSHEET_ID)
-    today = datetime.now().strftime("%d.%m.%Y")
-    try:
-        sheet = sh.worksheet(today)
-    except gspread.exceptions.WorksheetNotFound:
-        sheet = sh.add_worksheet(title=today, rows=1000, cols=10)
-        sheet.append_row(["Sana", "Ism Familiya", "Tel Raqam",
-                          "Ota-ona Tel", "Maktab", "Sinf",
-                          "Filial", "Smena", "Kurslar"])
-
-    
-
-    sheet.append_row([
-        sana,
-        data.get("name"),
-        data.get("phone"),
-        data.get("parent_phone"),
-        data.get("school"),
-        data.get("grade"),
-        data.get("filial"),
-        data.get("time_pref"),
-        courses_string
-    ])
-  # Ustun kengliklarini sozlash
+# Ustun kengliklarini sozlash
     set_column_widths = {
         "requests": [
             {"updateDimensionProperties": {"range": {"sheetId": sheet.id, "dimension": "COLUMNS", "startIndex": 0, "endIndex": 1}, "properties": {"pixelSize": 130}, "fields": "pixelSize"}},
@@ -139,10 +93,9 @@ def _write_to_google_sheets_sync(data):
             {"updateDimensionProperties": {"range": {"sheetId": sheet.id, "dimension": "COLUMNS", "startIndex": 6, "endIndex": 7}, "properties": {"pixelSize": 100}, "fields": "pixelSize"}},
             {"updateDimensionProperties": {"range": {"sheetId": sheet.id, "dimension": "COLUMNS", "startIndex": 7, "endIndex": 8}, "properties": {"pixelSize": 100}, "fields": "pixelSize"}},
             {"updateDimensionProperties": {"range": {"sheetId": sheet.id, "dimension": "COLUMNS", "startIndex": 8, "endIndex": 9}, "properties": {"pixelSize": 300}, "fields": "pixelSize"}},
-       ]
+        ]
     }
     sh.batch_update(set_column_widths)
-
 async def save_to_google_sheets(data):
     try:
         await asyncio.to_thread(_write_to_google_sheets_sync, data)
