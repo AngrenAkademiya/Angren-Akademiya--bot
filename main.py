@@ -91,6 +91,7 @@ def _write_to_google_sheets_sync(data):
         "https://www.googleapis.com/auth/drive"
     ]
 
+    import os
     creds_json = os.getenv("GOOGLE_CREDS")
 
     if creds_json:
@@ -101,13 +102,13 @@ def _write_to_google_sheets_sync(data):
 
     client = gspread.authorize(creds)
 
-    import os
+
     SPREADSHEET_ID = os.getenv("SPREADSHEET_ID", "1IMygjA0hB6yBIJBrwWENxhZDGtRdxH9Eqz3fOAzF8Oc")
     sh = client.open_by_key(SPREADSHEET_ID)
     try:
-        sheet = spreadsheet.worksheet("Varaq1")
+        sheet = sh.worksheet("Varaq1")
     except gspread.exceptions.WorksheetNotFound:
-        sheet = spreadsheet.sheet1
+        sheet = sh.sheet1
 
     if not sheet.get_all_values():
         sheet.append_row(["Sana", "Ism Familiya", "Tel Raqam", "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar"])
