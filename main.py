@@ -1,4 +1,4 @@
-[05.07.2026 13:36] Yulduzoy Xudoyorova: import os
+import os
 import logging
 from datetime import datetime
 import asyncio
@@ -28,7 +28,6 @@ dp = Dispatcher(storage=MemoryStorage())
 EXCEL_FILE = "students.xlsx"
 
 def save_to_excel(data):
-    from openpyxl.styles import Font
     from openpyxl.worksheet.page import PageMargins
 
     if not os.path.exists(EXCEL_FILE):
@@ -117,7 +116,8 @@ def _write_to_google_sheets_sync(data):
 
     sheet_url = os.getenv("GOOGLE_SHEET_URL")
     spreadsheet_id = os.getenv("SPREADSHEET_ID")
-[05.07.2026 13:36] Yulduzoy Xudoyorova: if sheet_url:
+
+    if sheet_url:
         spreadsheet = client.open_by_url(sheet_url)
     elif spreadsheet_id:
         spreadsheet = client.open_by_key(spreadsheet_id)
@@ -232,7 +232,7 @@ async def check_knowledge(message: types.Message):
     await message.answer(
         "📊 \"Angren Akademiya\" — Bilim Nazorati Tizimi\n\n"
         "✨ Yaqin kunlarda hammasi yanada mukammal boʻladi!\n\n"
-[05.07.2026 13:36] Yulduzoy Xudoyorova: "Kelajakda farzandingiz bizning \"Angren Akademiya\" oʻquv markazimizni tanlaganda, "
+        "Kelajakda farzandingiz bizning \"Angren Akademiya\" oʻquv markazimizni tanlaganda, "
         "ushbu tugma orqali har bir ota-ona aynan oʻz farzandining ismi, darsdagi ishtiroki va "
         "haqiqiy imtihon natijalari bilan muntazam tanishib borish imkoniyatiga ega boʻladi.\n\n"
         "Biz kelajak texnologiyalarini taʼlimga olib kirmoqdamiz!"
@@ -322,7 +322,9 @@ async def process_parent_phone(message: types.Message, state: FSMContext):
     await state.update_data(parent_phone=message.text)
     await message.answer("🏫 Nechanchi maktabda o'qiysiz?")
     await state.set_state(Registration.school)
-[05.07.2026 13:36] Yulduzoy Xudoyorova: @dp.message(Registration.school)
+
+
+@dp.message(Registration.school)
 async def process_school(message: types.Message, state: FSMContext):
     await state.update_data(school=message.text)
     await message.answer("🎓 Nechanchi sinfda o'qiysiz?")
@@ -431,7 +433,7 @@ async def process_time_pref(message: types.Message, state: FSMContext):
 
     student_report = (
         f"Muvaffaqiyatli royxatdan o'tdingiz!\n\n"
-[05.07.2026 13:36] Yulduzoy Xudoyorova: f"O'quvchi: {escape_markdown(user_data.get('name'))}\n"
+        f"O'quvchi: {escape_markdown(user_data.get('name'))}\n"
         f"Maktab/Sinf: {escape_markdown(user_data.get('school'))}, {escape_markdown(user_data.get('grade'))}\n"
         f"Filial: {escape_markdown(user_data.get('filial'))} | Smena: {escape_markdown(user_data.get('time_pref'))}\n\n"
         f"{courses_output}\n"
