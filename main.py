@@ -1,4 +1,4 @@
-[05.07.2026 9:47] Yulduzoy Xudoyorova: import os
+import os
 import logging
 from datetime import datetime
 import asyncio
