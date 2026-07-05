@@ -1,4 +1,4 @@
-import os
+[05.07.2026 9:47] Yulduzoy Xudoyorova: import os
 import logging
 from datetime import datetime
 import asyncio
@@ -15,7 +15,6 @@ from aiogram.types import FSInputFile
 import gspread
 from google.oauth2.service_account import Credentials
 
-# Loglarni sozlash
 logging.basicConfig(level=logging.INFO)
 
 API_TOKEN = os.getenv("BOT_TOKEN")
@@ -25,7 +24,6 @@ if not API_TOKEN:
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-# EXCELGA YOZISH TIZIMI
 EXCEL_FILE = "students.xlsx"
 
 def save_to_excel(data):
@@ -46,8 +44,7 @@ def save_to_excel(data):
     courses_list = data.get("selected_courses", [])
     courses_string = "\n".join(f"\u2022 {c.replace(chr(10), ' ')}" for c in courses_list)
 
-    # Tartib raqami: mavjud satrlar sonidan hisoblaymiz
-    tartib_raqam = ws.max_row  # 1-qator sarlavha, shuning uchun bu to'g'ri raqam
+    tartib_raqam = ws.max_row
 
     ws.append([
         tartib_raqam,
@@ -63,18 +60,15 @@ def save_to_excel(data):
     ])
 
     try:
-        # Ustun kengliklarini sozlash (printerga mos, A4 landscape)
         col_widths = {1: 5, 2: 16, 3: 22, 4: 14, 5: 14, 6: 10, 7: 6, 8: 12, 9: 12, 10: 35}
         for col_num, width in col_widths.items():
             col_letter = openpyxl.utils.get_column_letter(col_num)
             ws.column_dimensions[col_letter].width = width
 
-        # Barcha kataklar uchun alignment
         for row in ws.iter_rows(min_row=1):
             for cell in row:
                 cell.alignment = Alignment(wrap_text=True, vertical="center", horizontal="left")
 
-        # Satr balandliklarini sozlash
         for row in ws.iter_rows(min_row=2):
             max_lines = 1
             for cell in row:
@@ -84,7 +78,6 @@ def save_to_excel(data):
                         max_lines = lines_count
             ws.row_dimensions[row[0].row].height = max(max_lines * 15, 20)
 
-        # Printerga mos sahifa sozlamalari (A4, gorizontal)
         ws.page_setup.orientation = "landscape"
         ws.page_setup.paperSize = ws.PAPERSIZE_A4
         ws.page_setup.fitToPage = True
@@ -98,9 +91,7 @@ def save_to_excel(data):
     wb.save(EXCEL_FILE)
 
 
-# 🌟 GOOGLE SHEETS TIZIMI (GSPREAD)
 def _write_to_google_sheets_sync(data):
-    """Bu funksiya bloklovchi (sync) — shuning uchun alohida thread'da ishlatiladi."""
     sana = datetime.now().strftime("%d.%m.%Y %H:%M")
     courses_list = data.get("selected_courses", [])
     courses_string = ", ".join([c.replace('\n', ' ') for c in courses_list])
@@ -111,7 +102,8 @@ def _write_to_google_sheets_sync(data):
     ]
 
     creds_json = os.getenv("GOOGLE_CREDS")
-[04.07.2026 21:23] Yulduzoy Xudoyorova: if creds_json:
+
+    if creds_json:
         import json
         creds_data = json.loads(creds_json)
         creds = Credentials.from_service_account_info(creds_data, scopes=scopes)
@@ -120,23 +112,31 @@ def _write_to_google_sheets_sync(data):
 
     client = gspread.authorize(creds)
 
-    # Avval Render'dagi GOOGLE_SHEET_URL yoki SPREADSHEET_ID'ni tekshiramiz,
-    # agar ular sozlangan bo'lsa, aynan shu jadval ishlatiladi.
-    # Bo'lmasa, kod ichidagi standart (hardcoded) URL ishlatiladi.
     sheet_url = os.getenv("GOOGLE_SHEET_URL")
     spreadsheet_id = os.getenv("SPREADSHEET_ID")
-
-    if sheet_url:
+[05.07.2026 9:47] Yulduzoy Xudoyorova: if sheet_url:
         sheet = client.open_by_url(sheet_url).sheet1
     elif spreadsheet_id:
         sheet = client.open_by_key(spreadsheet_id).sheet1
     else:
-        # URL orqali ulandik (standart, agar muhit o'zgaruvchilari bo'lmasa)
         sheet = client.open_by_url(
             "https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYlUn0/edit"
         ).sheet1
 
+    # Agar jadval bo'sh bo'lsa, sarlavha qatori qo'shamiz
+    all_rows = sheet.get_all_values()
+    if len(all_rows) == 0:
+        sheet.append_row([
+            "№", "Sana", "Ism Familiya", "Tel Raqam",
+            "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar"
+        ])
+        all_rows = sheet.get_all_values()
+
+    # Tartib raqami — sarlavhadan keyingi qatorlar soni
+    tartib_raqam = len(all_rows)
+
     sheet.append_row([
+        tartib_raqam,
         sana,
         data.get("name"),
         data.get("phone"),
@@ -151,12 +151,9 @@ def _write_to_google_sheets_sync(data):
 
 async def save_to_google_sheets(data):
     try:
-        # gspread bloklovchi (sync) kutubxona — uni alohida thread'da ishga
-        # tushiramiz, shunda bot boshqa xabarlarga javob berishni to'xtatmaydi.
         await asyncio.to_thread(_write_to_google_sheets_sync, data)
         logging.info("Ma'lumotlar Google Sheets'ga muvaffaqiyatli yozildi!")
     except Exception as e:
-        # To'liq traceback'ni logga yozamiz — aniq sababni topish uchun shu MUHIM
         logging.exception("Google Sheets yozishda xato:")
         admin_id = os.getenv("ADMIN_ID")
         if admin_id:
@@ -169,7 +166,6 @@ async def save_to_google_sheets(data):
                 pass
 
 
-# --- RO'YXATDAN O'TISH HOLATLARI ---
 class Registration(StatesGroup):
     name = State()
     phone = State()
@@ -221,7 +217,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
 
 @dp.message(F.text == "/excel")
 async def send_excel(message: types.Message):
-[04.07.2026 21:23] Yulduzoy Xudoyorova: if os.path.exists(EXCEL_FILE):
+    if os.path.exists(EXCEL_FILE):
         excel_doc = FSInputFile(EXCEL_FILE)
         await message.answer_document(document=excel_doc, caption="📊 Angren Akademiya o'quvchilar ro'yxati (Excel)")
     else:
@@ -233,7 +229,7 @@ async def check_knowledge(message: types.Message):
     await message.answer(
         "📊 \"Angren Akademiya\" — Bilim Nazorati Tizimi\n\n"
         "✨ Yaqin kunlarda hammasi yanada mukammal boʻladi!\n\n"
-        "Kelajakda farzandingiz bizning **\"Angren Akademiya\" oʻquv markazimizni tanlaganda, "
+[05.07.2026 9:47] Yulduzoy Xudoyorova: "Kelajakda farzandingiz bizning **\"Angren Akademiya\" oʻquv markazimizni tanlaganda, "
         "ushbu tugma orqali har bir ota-ona aynan oʻz farzandining ismi, darsdagi ishtiroki va "
         "haqiqiy imtihon natijalari bilan muntazam tanishib borish imkoniyatiga ega boʻladi.\n\n"
         "🚀 *Biz kelajak texnologiyalarini taʼlimga olib kirmoqdamiz!*"
@@ -244,11 +240,11 @@ async def attendance_menu(message: types.Message):
     kb = InlineKeyboardBuilder()
     kb.button(text="🔔 Keldim", callback_data="attendance_in")
     kb.button(text="🔕 Ketdim", callback_data="attendance_out")
-    kb.button(text="💰 Oylik to'lov holati", callback_data="attendance_pay") 
-    kb.button(text="🚀 Uzoq muddatli imtiyozlar", callback_data="attendance_promo") 
+    kb.button(text="💰 Oylik to'lov holati", callback_data="attendance_pay")
+    kb.button(text="🚀 Uzoq muddatli imtiyozlar", callback_data="attendance_promo")
     kb.adjust(2, 1, 1)
     await message.answer(
-        "🚪 Angren Akademiyasi — Davomat va Shaxsiy Balans**\n\nKerakli tugmani bosing:",
+        "🚪 Angren Akademiyasi — Davomat va Shaxsiy Balans\n\nKerakli tugmani bosing:",
         reply_markup=kb.as_markup()
     )
 
@@ -257,7 +253,7 @@ async def attendance_menu(message: types.Message):
 async def process_attendance(callback: types.CallbackQuery):
     action = callback.data.split("_")[1]
     current_time = datetime.now().strftime("%H:%M")
-    
+
     if action == "in":
         await callback.message.answer(f"🔔 Angren Akademiya Xabarnomasi\n\nFarzandingiz soat {current_time} da markazimizga eson-omon yetib keldi. 🔬")
     elif action == "out":
@@ -270,7 +266,7 @@ async def process_attendance(callback: types.CallbackQuery):
         await callback.message.answer("💰 To'lov usulini tanlang:", reply_markup=pay_kb.as_markup())
     elif action == "promo":
         await callback.message.answer(
-            "🚀 \"Angren Akademiya\" Premium Imtiyozlar:**\n\n"
+            "🚀 \"Angren Akademiya\" Premium Imtiyozlar:\n\n"
             "🥈 3 Oylik: 10% chegirma + sovg'a daftar 🎁\n"
             "🥇 6 Oylik: 15% chegirma + futbolka va kepka 👕\n"
             "👑 1 Yillik: 20% chegirma + darsliklar bepul 📚"
@@ -283,7 +279,7 @@ async def method_payment(callback: types.CallbackQuery):
     method = callback.data.split("_")[2]
     karta_raqam = os.getenv("KARTA_RAQAMI", "8600 0000 0000 0000")
     karta_egasi = os.getenv("KARTA_EGASI", "Angren Akademiya Mas'ul Xodimi")
-    
+
     if method == "card":
         await callback.message.answer(f"💳 Karta raqami: {karta_raqam}\nEga: {karta_egasi}\n\nChekni adminga yuboring.")
     else:
@@ -291,7 +287,6 @@ async def method_payment(callback: types.CallbackQuery):
     await callback.answer()
 
 
-# --- RO'YXATDAN O'TISH ---
 @dp.message(F.text == "📝 Ro'yxatdan o'tish")
 async def start_registration(message: types.Message, state: FSMContext):
     await message.answer("Ism va familiyangizni kiriting:")
@@ -303,7 +298,9 @@ async def process_name(message: types.Message, state: FSMContext):
     await state.update_data(name=message.text)
     await message.answer("📞 O'quvchining telefon raqamini kiriting:")
     await state.set_state(Registration.phone)
-[04.07.2026 21:23] Yulduzoy Xudoyorova: @dp.message(Registration.phone)
+
+
+@dp.message(Registration.phone)
 async def process_phone(message: types.Message, state: FSMContext):
     await state.update_data(phone=message.text)
     await message.answer("👨‍👩‍👦 Ota-onangizning telefon raqamini kiriting:")
@@ -315,9 +312,7 @@ async def process_parent_phone(message: types.Message, state: FSMContext):
     await state.update_data(parent_phone=message.text)
     await message.answer("🏫 Nechanchi maktabda o'qiysiz?")
     await state.set_state(Registration.school)
-
-
-@dp.message(Registration.school)
+[05.07.2026 9:47] Yulduzoy Xudoyorova: @dp.message(Registration.school)
 async def process_school(message: types.Message, state: FSMContext):
     await state.update_data(school=message.text)
     await message.answer("🎓 Nechanchi sinfda o'qiysiz?")
@@ -351,11 +346,11 @@ async def show_subjects_keyboard(message: types.Message, selected_courses: list)
         kb.button(text=f"{subject} {status}", callback_data=f"sub_{idx}")
     kb.button(text="➡️ Davom etish", callback_data="sub_done")
     kb.adjust(1)
-    
+
     text = "📚 Kurslarni tanlang:\n\n"
     if selected_courses:
         text += "Tanlanganlar:\n" + "\n".join(f"- {c.replace(chr(10), ' ')}" for c in selected_courses)
-        
+
     if isinstance(message, types.Message):
         await message.answer(text, reply_markup=kb.as_markup())
     else:
@@ -382,44 +377,43 @@ async def process_subjects(callback: types.CallbackQuery, state: FSMContext):
 
     subject_idx = int(action)
     subject_name = AVAILABLE_SUBJECTS[subject_idx]
-    
+
     if subject_name in selected_courses:
         selected_courses.remove(subject_name)
     else:
         selected_courses.append(subject_name)
-        
+
     await state.update_data(selected_courses=selected_courses)
     await show_subjects_keyboard(callback, selected_courses)
     await callback.answer()
 
 
 def escape_markdown(text):
-    """Foydalanuvchi yozgan matndagi Markdown uchun xavfli belgilarni
-    backslash bilan himoyalaydi, shunda Telegram entity xatosi bermaydi."""
     if text is None:
         return ""
     text = str(text)
     for ch in ("_", "*", "`", "["):
         text = text.replace(ch, "\\" + ch)
     return text
-[04.07.2026 21:23] Yulduzoy Xudoyorova: @dp.message(Registration.time_pref)
+
+
+@dp.message(Registration.time_pref)
 async def process_time_pref(message: types.Message, state: FSMContext):
     if message.text not in AVAILABLE_TIMES:
         await message.answer("Smenani tugmalardan tanlang!")
         return
     await state.update_data(time_pref=message.text)
     user_data = await state.get_data()
-    
+
     save_to_excel(user_data)
     asyncio.create_task(save_to_google_sheets(user_data))
-    
+
     selected_courses = user_data.get("selected_courses", [])
     courses_output = "📚 Tanlangan kurslar:\n" + "".join(f"• {c.replace(chr(10), ' ')}\n" for c in selected_courses)
 
-    # BU YERDA 'f' HARFI QOLIB KETGAN EKAN, TUZATILDI
     student_report = (
         f"🎉 Muvaffaqiyatli ro'yxatdan o'tdingiz!\n\n"
-        f"👤 O'quvchi: {escape_markdown(user_data.get('name'))}\n"
+[05.07.2026 9:47] Yulduzoy Xudoyorova: f"👤 O'quvchi: {escape_markdown(user_data.get('name'))}\n"
         f"🏫 Maktab/Sinf: {escape_markdown(user_data.get('school'))}, {escape_markdown(user_data.get('grade'))}\n"
         f"📍 Filial: {escape_markdown(user_data.get('filial'))} | 🕒 Smena: {escape_markdown(user_data.get('time_pref'))}\n\n"
         f"{courses_output}\n"
@@ -439,7 +433,6 @@ async def process_time_pref(message: types.Message, state: FSMContext):
     await state.clear()
 
 
-# --- RENDER PORTI ---
 async def handle_health(request):
     return web.Response(text="Angren Akademiya boti faol!")
 
@@ -475,5 +468,5 @@ async def main():
     await dp.start_polling(bot)
 
 
-if __name__ == "__main__":
+if name == "main":
     asyncio.run(main())
