@@ -1,4 +1,4 @@
-import os
+[05.07.2026 13:36] Yulduzoy Xudoyorova: import os
 import logging
 from datetime import datetime
 import asyncio
@@ -93,7 +93,10 @@ def save_to_excel(data):
 
 
 def _write_to_google_sheets_sync(data):
-    sana = datetime.now().strftime("%d.%m.%Y %H:%M")
+    now = datetime.now()
+    sana = now.strftime("%d.%m.%Y %H:%M")
+    bugun = now.strftime("%d.%m.%Y")
+
     courses_list = data.get("selected_courses", [])
     courses_string = ", ".join([c.replace('\n', ' ') for c in courses_list])
 
@@ -114,25 +117,25 @@ def _write_to_google_sheets_sync(data):
 
     sheet_url = os.getenv("GOOGLE_SHEET_URL")
     spreadsheet_id = os.getenv("SPREADSHEET_ID")
-    
-    # 1. TIZIMLI TO'G'RILASH: Indentation (surilish) xatosi tuzatildi
-    if sheet_url:
-        sheet = client.open_by_url(sheet_url).sheet1
+[05.07.2026 13:36] Yulduzoy Xudoyorova: if sheet_url:
+        spreadsheet = client.open_by_url(sheet_url)
     elif spreadsheet_id:
-        sheet = client.open_by_key(spreadsheet_id).sheet1
+        spreadsheet = client.open_by_key(spreadsheet_id)
     else:
-        sheet = client.open_by_url(
+        spreadsheet = client.open_by_url(
             "https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYlUn0/edit"
-        ).sheet1
+        )
 
-    all_rows = sheet.get_all_values()
-    if len(all_rows) == 0:
+    try:
+        sheet = spreadsheet.worksheet(bugun)
+    except Exception:
+        sheet = spreadsheet.add_worksheet(title=bugun, rows=1000, cols=10)
         sheet.append_row([
             "№", "Sana", "Ism Familiya", "Tel Raqam",
             "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar"
         ])
-        all_rows = sheet.get_all_values() # 2. MANTIQIY TO'G'RILASH: Jadval yangilandi, o'quvchi tartib raqami to'g'ri chiqadi
 
+    all_rows = sheet.get_all_values()
     tartib_raqam = len(all_rows)
 
     sheet.append_row([
@@ -158,10 +161,9 @@ async def save_to_google_sheets(data):
         admin_id = os.getenv("ADMIN_ID")
         if admin_id:
             try:
-                # 3. TIZIMLI TO'G'RILASH: type(e).__name__ xatoligi bartaraf etildi
                 await bot.send_message(
                     int(admin_id),
-                    f"⚠️ Google Sheets'ga yozishda xato:\n\n{type(e).__name__}: {e}"
+                    f"Google Sheets xato: {type(e).__name__}: {e}"
                 )
             except Exception:
                 pass
@@ -179,8 +181,6 @@ class Registration(StatesGroup):
 
 AVAILABLE_FILIALS = ["Angren", "Ohangaron"]
 AVAILABLE_TIMES = ["Ertalabki", "Kunduzgi", "Kechki"]
-
-# 4. VIZUAL TO'G'RILASH: Barcha imlo, harf xatolari va IELTS nomlari ideal holatga keltirildi
 AVAILABLE_SUBJECTS = [
     "Matematika - Milliy va xalqaro sertifikat",
     "Matematika - majburiy blok uchun",
@@ -212,7 +212,7 @@ def get_main_menu():
 async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer(
-        "✨ Angren Akademiyasi rasmiy botiga xush kelibsiz! \n\n"
+        "✨ Angren Akademiyasi rasmiy botiga xush kelibsiz!\n\n"
         "Kelajak akademiyasida o'z bilimingizni va farzandingiz kamolotini nazorat qiling.",
         reply_markup=get_main_menu()
     )
@@ -232,11 +232,12 @@ async def check_knowledge(message: types.Message):
     await message.answer(
         "📊 \"Angren Akademiya\" — Bilim Nazorati Tizimi\n\n"
         "✨ Yaqin kunlarda hammasi yanada mukammal boʻladi!\n\n"
-        "Kelajakda farzandingiz bizning **\"Angren Akademiya\" oʻquv markazimizni tanlaganda, "
+[05.07.2026 13:36] Yulduzoy Xudoyorova: "Kelajakda farzandingiz bizning \"Angren Akademiya\" oʻquv markazimizni tanlaganda, "
         "ushbu tugma orqali har bir ota-ona aynan oʻz farzandining ismi, darsdagi ishtiroki va "
         "haqiqiy imtihon natijalari bilan muntazam tanishib borish imkoniyatiga ega boʻladi.\n\n"
-        "🚀 *Biz kelajak texnologiyalarini taʼlimga olib kirmoqdamiz!*"
+        "Biz kelajak texnologiyalarini taʼlimga olib kirmoqdamiz!"
     )
+
 
 @dp.message(F.text == "🚪 Davomat (Keldim/Ketdim)")
 async def attendance_menu(message: types.Message):
@@ -258,9 +259,13 @@ async def process_attendance(callback: types.CallbackQuery):
     current_time = datetime.now().strftime("%H:%M")
 
     if action == "in":
-        await callback.message.answer(f"🔔 Angren Akademiya Xabarnomasi\n\nFarzandingiz soat {current_time} da markazimizga eson-omon yetib keldi. 🔬")
+        await callback.message.answer(
+            f"🔔 Angren Akademiya Xabarnomasi\n\nFarzandingiz soat {current_time} da markazimizga eson-omon yetib keldi. 🔬"
+        )
     elif action == "out":
-        await callback.message.answer(f"🔕 Angren Akademiya Xabarnomasi\n\nFarzandingiz soat {current_time} da darsdan chiqdi. Oq yo'l! ☀️")
+        await callback.message.answer(
+            f"🔕 Angren Akademiya Xabarnomasi\n\nFarzandingiz soat {current_time} da darsdan chiqdi. Oq yo'l! ☀️"
+        )
     elif action == "pay":
         pay_kb = InlineKeyboardBuilder()
         pay_kb.button(text="💳 Plastik (Click/Payme)", callback_data="pay_via_card")
@@ -284,7 +289,9 @@ async def method_payment(callback: types.CallbackQuery):
     karta_egasi = os.getenv("KARTA_EGASI", "Angren Akademiya Mas'ul Xodimi")
 
     if method == "card":
-        await callback.message.answer(f"💳 Karta raqami: {karta_raqam}\nEga: {karta_egasi}\n\nChekni adminga yuboring.")
+        await callback.message.answer(
+            f"💳 Karta raqami: {karta_raqam}\nEga: {karta_egasi}\n\nChekni adminga yuboring."
+        )
     else:
         await callback.message.answer("💵 To'lovni administratorga topshiring. Rahmat!")
     await callback.answer()
@@ -315,12 +322,12 @@ async def process_parent_phone(message: types.Message, state: FSMContext):
     await state.update_data(parent_phone=message.text)
     await message.answer("🏫 Nechanchi maktabda o'qiysiz?")
     await state.set_state(Registration.school)
-
-@dp.message(Registration.school)
+[05.07.2026 13:36] Yulduzoy Xudoyorova: @dp.message(Registration.school)
 async def process_school(message: types.Message, state: FSMContext):
     await state.update_data(school=message.text)
     await message.answer("🎓 Nechanchi sinfda o'qiysiz?")
     await state.set_state(Registration.grade)
+
 
 @dp.message(Registration.grade)
 async def process_grade(message: types.Message, state: FSMContext):
@@ -343,7 +350,7 @@ async def process_filial(message: types.Message, state: FSMContext):
     await state.set_state(Registration.subjects)
 
 
-async def show_subjects_keyboard(message: types.Message, selected_courses: list):
+async def show_subjects_keyboard(message, selected_courses):
     kb = InlineKeyboardBuilder()
     for idx, subject in enumerate(AVAILABLE_SUBJECTS):
         status = "✅" if subject in selected_courses else ""
@@ -353,12 +360,15 @@ async def show_subjects_keyboard(message: types.Message, selected_courses: list)
 
     text = "📚 Kurslarni tanlang:\n\n"
     if selected_courses:
-        text += "Tanlanganlar:\n" + "\n".join(f"- {c.replace(chr(10), ' ')}" for c in selected_courses)
+        text += "Tanlanganlar:\n" + "\n".join(
+            f"- {c.replace(chr(10), ' ')}" for c in selected_courses
+        )
 
     if isinstance(message, types.Message):
         await message.answer(text, reply_markup=kb.as_markup())
     else:
         await message.message.edit_text(text, reply_markup=kb.as_markup())
+
 
 @dp.callback_query(Registration.subjects, F.data.startswith("sub_"))
 async def process_subjects(callback: types.CallbackQuery, state: FSMContext):
@@ -374,7 +384,9 @@ async def process_subjects(callback: types.CallbackQuery, state: FSMContext):
         for t in AVAILABLE_TIMES:
             kb.button(text=t)
         kb.adjust(3)
-        await callback.message.answer("Dars vaqtini tanlang:", reply_markup=kb.as_markup(resize_keyboard=True))
+        await callback.message.answer(
+            "Dars vaqtini tanlang:", reply_markup=kb.as_markup(resize_keyboard=True)
+        )
         await state.set_state(Registration.time_pref)
         await callback.answer()
         return
@@ -413,27 +425,42 @@ async def process_time_pref(message: types.Message, state: FSMContext):
     asyncio.create_task(save_to_google_sheets(user_data))
 
     selected_courses = user_data.get("selected_courses", [])
-    courses_output = "📚 Tanlangan kurslar:\n" + "".join(f"• {c.replace(chr(10), ' ')}\n" for c in selected_courses)
+    courses_output = "📚 Tanlangan kurslar:\n" + "".join(
+        f"• {c.replace(chr(10), ' ')}\n" for c in selected_courses
+    )
 
     student_report = (
-        f"🎉 Muvaffaqiyatli ro'yxatdan o'tdingiz!\n\n"
-        f"👤 O'quvchi: {escape_markdown(user_data.get('name'))}\n"
-        f"🏫 Maktab/Sinf: {escape_markdown(user_data.get('school'))}, {escape_markdown(user_data.get('grade'))}\n"
-        f"📍 Filial: {escape_markdown(user_data.get('filial'))} | 🕒 Smena: {escape_markdown(user_data.get('time_pref'))}\n\n"
+        f"Muvaffaqiyatli royxatdan o'tdingiz!\n\n"
+[05.07.2026 13:36] Yulduzoy Xudoyorova: f"O'quvchi: {escape_markdown(user_data.get('name'))}\n"
+        f"Maktab/Sinf: {escape_markdown(user_data.get('school'))}, {escape_markdown(user_data.get('grade'))}\n"
+        f"Filial: {escape_markdown(user_data.get('filial'))} | Smena: {escape_markdown(user_data.get('time_pref'))}\n\n"
         f"{courses_output}\n"
-        f"📞 +998 94 041 42 55\n📞 +998 93 101 58 70"
+        f"+998 94 041 42 55\n+998 93 101 58 70"
     )
 
     is_medical = any("Tibbiyot" in course for course in selected_courses)
     if is_medical:
         try:
             photo = FSInputFile("IMG_20260619_235730_628.jpg")
-            await message.answer_photo(photo=photo, caption=student_report, parse_mode="Markdown", reply_markup=get_main_menu())
+            await message.answer_photo(
+                photo=photo,
+                caption=student_report,
+                parse_mode="Markdown",
+                reply_markup=get_main_menu()
+            )
         except Exception as e:
             logging.exception("Rasm yuborishda xato:")
-            await message.answer(text=student_report, parse_mode="Markdown", reply_markup=get_main_menu())
+            await message.answer(
+                text=student_report,
+                parse_mode="Markdown",
+                reply_markup=get_main_menu()
+            )
     else:
-        await message.answer(text=student_report, parse_mode="Markdown", reply_markup=get_main_menu())
+        await message.answer(
+            text=student_report,
+            parse_mode="Markdown",
+            reply_markup=get_main_menu()
+        )
     await state.clear()
 
 
