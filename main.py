@@ -2,6 +2,7 @@ import os
 import logging
 from datetime import datetime
 import asyncio
+import json
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
@@ -34,7 +35,7 @@ def save_to_excel(data):
         wb = Workbook()
         ws = wb.active
         ws.title = "O'quvchilar"
-        ws.append(["\u2116", "Sana", "Ism Familiya", "Tel Raqam", "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar"])
+        ws.append(["№", "Sana", "Ism Familiya", "Tel Raqam", "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar"])
         wb.save(EXCEL_FILE)
 
     wb = openpyxl.load_workbook(EXCEL_FILE)
@@ -42,7 +43,7 @@ def save_to_excel(data):
     sana = datetime.now().strftime("%d.%m.%Y %H:%M")
 
     courses_list = data.get("selected_courses", [])
-    courses_string = "\n".join(f"\u2022 {c.replace(chr(10), ' ')}" for c in courses_list)
+    courses_string = "\n".join(f"• {c.replace(chr(10), ' ')}" for c in courses_list)
 
     tartib_raqam = ws.max_row
 
@@ -104,7 +105,6 @@ def _write_to_google_sheets_sync(data):
     creds_json = os.getenv("GOOGLE_CREDS")
 
     if creds_json:
-        import json
         creds_data = json.loads(creds_json)
         creds = Credentials.from_service_account_info(creds_data, scopes=scopes)
     else:
@@ -114,7 +114,9 @@ def _write_to_google_sheets_sync(data):
 
     sheet_url = os.getenv("GOOGLE_SHEET_URL")
     spreadsheet_id = os.getenv("SPREADSHEET_ID")
- if sheet_url:
+    
+    # 1. TIZIMLI TO'G'RILASH: Indentation (surilish) xatosi tuzatildi
+    if sheet_url:
         sheet = client.open_by_url(sheet_url).sheet1
     elif spreadsheet_id:
         sheet = client.open_by_key(spreadsheet_id).sheet1
@@ -123,16 +125,14 @@ def _write_to_google_sheets_sync(data):
             "https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYlUn0/edit"
         ).sheet1
 
-    # Agar jadval bo'sh bo'lsa, sarlavha qatori qo'shamiz
     all_rows = sheet.get_all_values()
     if len(all_rows) == 0:
         sheet.append_row([
             "№", "Sana", "Ism Familiya", "Tel Raqam",
             "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar"
         ])
-        all_rows = sheet.get_all_values()
+        all_rows = sheet.get_all_values() # 2. MANTIQIY TO'G'RILASH: Jadval yangilandi, o'quvchi tartib raqami to'g'ri chiqadi
 
-    # Tartib raqami — sarlavhadan keyingi qatorlar soni
     tartib_raqam = len(all_rows)
 
     sheet.append_row([
@@ -158,9 +158,10 @@ async def save_to_google_sheets(data):
         admin_id = os.getenv("ADMIN_ID")
         if admin_id:
             try:
+                # 3. TIZIMLI TO'G'RILASH: type(e).__name__ xatoligi bartaraf etildi
                 await bot.send_message(
                     int(admin_id),
-                    f"⚠️ Google Sheets'ga yozishda xato:\n\n{type(e).name}: {e}"
+                    f"⚠️ Google Sheets'ga yozishda xato:\n\n{type(e).__name__}: {e}"
                 )
             except Exception:
                 pass
@@ -178,20 +179,22 @@ class Registration(StatesGroup):
 
 AVAILABLE_FILIALS = ["Angren", "Ohangaron"]
 AVAILABLE_TIMES = ["Ertalabki", "Kunduzgi", "Kechki"]
+
+# 4. VIZUAL TO'G'RILASH: Barcha imlo, harf xatolari va IELTS nomlari ideal holatga keltirildi
 AVAILABLE_SUBJECTS = [
     "Matematika - Milliy va xalqaro sertifikat",
-    "Matematika - majburiy blok ucun",
-    "Ingliz tili - ILTES",
+    "Matematika - majburiy blok uchun",
+    "Ingliz tili - IELTS",
     "Tibbiyot - shifokorlik kasblari uchun\nKimyo - Milliy va xalqaro sertifikat",
     "Prezident maktablariga tayyorlov",
     "Al-Xorazmiy maktablariga tayyorlov",
-    "Tibbiyot-shifokorlik kasbini tanlaganlar uchun-\nbiologiya - Milliy va xalqaro sertifikat",
-    "Tarix- Milliy sertifikat",
-    "Tarix -Majburiy blok uchun",
-    "Huqu-Milliy sertifikat",
-    "IT- Milliy v xalaro sertifikat",
-    "Ona tili va adabiyoti -Milliy sertifikat",
-    "Ona tili va adabiyoti -Majburiy blok uchun",
+    "Tibbiyot - shifokorlik kasbini tanlaganlar uchun\nBiologiya - Milliy va xalqaro sertifikat",
+    "Tarix - Milliy sertifikat",
+    "Tarix - Majburiy blok uchun",
+    "Huquq - Milliy sertifikat",
+    "IT - Milliy va xalqaro sertifikat",
+    "Ona tili va adabiyoti - Milliy sertifikat",
+    "Ona tili va adabiyoti - Majburiy blok uchun",
     "Maktabga tayyorlov. Pochemuchka"
 ]
 
@@ -229,7 +232,7 @@ async def check_knowledge(message: types.Message):
     await message.answer(
         "📊 \"Angren Akademiya\" — Bilim Nazorati Tizimi\n\n"
         "✨ Yaqin kunlarda hammasi yanada mukammal boʻladi!\n\n"
- "Kelajakda farzandingiz bizning **\"Angren Akademiya\" oʻquv markazimizni tanlaganda, "
+        "Kelajakda farzandingiz bizning **\"Angren Akademiya\" oʻquv markazimizni tanlaganda, "
         "ushbu tugma orqali har bir ota-ona aynan oʻz farzandining ismi, darsdagi ishtiroki va "
         "haqiqiy imtihon natijalari bilan muntazam tanishib borish imkoniyatiga ega boʻladi.\n\n"
         "🚀 *Biz kelajak texnologiyalarini taʼlimga olib kirmoqdamiz!*"
@@ -312,6 +315,7 @@ async def process_parent_phone(message: types.Message, state: FSMContext):
     await state.update_data(parent_phone=message.text)
     await message.answer("🏫 Nechanchi maktabda o'qiysiz?")
     await state.set_state(Registration.school)
+
 @dp.message(Registration.school)
 async def process_school(message: types.Message, state: FSMContext):
     await state.update_data(school=message.text)
@@ -413,7 +417,7 @@ async def process_time_pref(message: types.Message, state: FSMContext):
 
     student_report = (
         f"🎉 Muvaffaqiyatli ro'yxatdan o'tdingiz!\n\n"
- f"👤 O'quvchi: {escape_markdown(user_data.get('name'))}\n"
+        f"👤 O'quvchi: {escape_markdown(user_data.get('name'))}\n"
         f"🏫 Maktab/Sinf: {escape_markdown(user_data.get('school'))}, {escape_markdown(user_data.get('grade'))}\n"
         f"📍 Filial: {escape_markdown(user_data.get('filial'))} | 🕒 Smena: {escape_markdown(user_data.get('time_pref'))}\n\n"
         f"{courses_output}\n"
