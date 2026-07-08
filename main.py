@@ -216,7 +216,9 @@ async def cmd_start(message: types.Message, state: FSMContext):
         "Kelajak akademiyasida o'z bilimingizni va farzandingiz kamolotini nazorat qiling.",
         reply_markup=get_main_menu()
     )
-
+ @dp.message(F.text == "/help")
+async def cmd_help(message: types.Message):
+    await message.answer("Sizga qanday yordam bera olaman?") 
 
 @dp.message(F.text == "/excel")
 async def send_excel(message: types.Message):
