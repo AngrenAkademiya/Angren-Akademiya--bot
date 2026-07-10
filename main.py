@@ -206,6 +206,7 @@ def get_main_menu():
     kb.button(text="📈 Bilim darajasini tekshirish")
     kb.button(text="🚪 Davomat (Keldim/Ketdim)")
     kb.adjust(1, 2)
+    kb.button(text="👤 Shaxsiy kabinet")
     return kb.as_markup(resize_keyboard=True)
 
 
