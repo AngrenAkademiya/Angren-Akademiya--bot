@@ -34,7 +34,7 @@ def save_to_excel(data):
         wb = Workbook()
         ws = wb.active
         ws.title = "O'quvchilar"
-        ws.append(["№", "Sana", "Ism Familiya", "Tel Raqam", "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar"])
+        ws.append(["№", "Sana", "Ism Familiya", "Tel Raqam", "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar","ID"])
         wb.save(EXCEL_FILE)
 
     wb = openpyxl.load_workbook(EXCEL_FILE)
@@ -56,7 +56,8 @@ def save_to_excel(data):
         data.get("grade"),
         data.get("filial"),
         data.get("time_pref"),
-        courses_string
+        courses_string,
+        message.from_user.id
     ])
 
     try:
@@ -538,7 +539,28 @@ async def main():
     await start_web_server()
     asyncio.create_task(pinger_loop())
     await dp.start_polling(bot)
-
+@dp.callback_query(F.data == "profile")
+async def profile_handler(callback: types.CallbackQuery):
+    user_id = str(callback.from_user.id)
+    
+    # 1. Sheets'dan barcha ma'lumotni olamiz
+    # Eslatma: 'worksheet' o'zgaruvchisi kodingizning boshida qanday nomlangan bo'lsa, shunday yozing
+    records = worksheet.get_all_values() 
+    
+    found_file = None
+    
+    # 2. Sheets ichidan user_id ni qidiramiz
+    for row in records:
+        if row[0] == user_id:  # Agar 1-ustunda ID bo'lsa
+            found_file = row[1] # Agar 2-ustunda fayl nomi bo'lsa
+            break
+            
+    # 3. Sertifikatni yuborish
+    if found_file and os.path.exists(found_file):
+        await callback.message.answer("👤 Shaxsiy kabinetingizga xush kelibsiz! ✅ Sizning sertifikatingiz:")
+        await callback.message.answer_document(FSInputFile(found_file))
+    else:
+        await callback.message.answer("👤 Shaxsiy kabinetingizga xush kelibsiz!\n\nℹ️ Hozircha tizimda sertifikatingiz aniqlanmadi.")
 if __name__ == "__main__":
     asyncio.run(main())
 
