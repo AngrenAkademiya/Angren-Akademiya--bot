@@ -526,7 +526,13 @@ async def pinger_loop():
         except Exception:
             pass
         await asyncio.sleep(300)
+@dp.callback_query(F.data == "profile")
+async def profile_handler(callback: types.CallbackQuery):
+    await callback.message.answer("👤 Bu sizning Shaxsiy kabinetingiz.")
 
+@dp.callback_query(F.data == "cert")
+async def cert_handler(callback: types.CallbackQuery):
+    await callback.message.answer("🎓 Sertifikat yuklash bo‘limi.")
 async def main():
     await start_web_server()
     asyncio.create_task(pinger_loop())
