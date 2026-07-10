@@ -248,7 +248,8 @@ async def attendance_menu(message: types.Message):
     kb.button(text="🔕 Ketdim", callback_data="attendance_out")
     kb.button(text="💰 Oylik to'lov holati", callback_data="attendance_pay")
     kb.button(text="🚀 Uzoq muddatli imtiyozlar", callback_data="attendance_promo")
-    kb.adjust(2, 1, 1)
+    kb.button(text="👤 Shaxsiy kabinet", callback_data="profile")
+    kb.adjust(2, 2, 1)
     await message.answer(
         "🚪 Angren Akademiyasi — Davomat va Shaxsiy Balans\n\nKerakli tugmani bosing:",
         reply_markup=kb.as_markup()
