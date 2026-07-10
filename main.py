@@ -501,7 +501,38 @@ async def main():
     await start_web_server()
     asyncio.create_task(pinger_loop())
     await dp.start_polling(bot)
+async def handle_health(request):
+    return web.Response(text="Angren Akademiya boti faol!")
 
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get("/", handle_health)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.getenv("PORT", 10000))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
+async def pinger_loop():
+    app_url = os.getenv("APP_URL")
+    if not app_url:
+        return
+    await asyncio.sleep(10)
+    while True:
+        try:
+            async with ClientSession() as session:
+                async with session.get(app_url) as response:
+                    pass
+        except Exception:
+            pass
+        await asyncio.sleep(300)
+
+async def main():
+    await start_web_server()
+    asyncio.create_task(pinger_loop())
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+
