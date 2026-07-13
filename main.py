@@ -61,7 +61,7 @@ def save_to_excel(data):
     ])
 
     try:
-        col_widths = {1: 5, 2: 16, 3: 22, 4: 14, 5: 14, 6: 10, 7: 6, 8: 12, 9: 12, 10: 35}
+        col_widths = {1: 5, 2: 16, 3: 22, 4: 14, 5: 14, 6: 10, 7: 6, 8: 12, 9: 12, 10: 15,11:15}
         for col_num, width in col_widths.items():
             col_letter = openpyxl.utils.get_column_letter(col_num)
             ws.column_dimensions[col_letter].width = width
@@ -133,7 +133,7 @@ def _write_to_google_sheets_sync(data):
         sheet = spreadsheet.add_worksheet(title=bugun, rows=1000, cols=10)
         sheet.append_row([
             "№", "Sana", "Ism Familiya", "Tel Raqam",
-            "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar"
+            "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar","ID"
         ])
 
     all_rows = sheet.get_all_values()
