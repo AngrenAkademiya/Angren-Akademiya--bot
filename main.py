@@ -120,7 +120,7 @@ def _write_to_google_sheets_sync(data):
 
 if sheet_url:
         spreadsheet = client.open_by_url(sheet_url)
-    elif spreadsheet_id:
+elif spreadsheet_id:
         spreadsheet = client.open_by_key(spreadsheet_id)
     else:
         spreadsheet = client.open
