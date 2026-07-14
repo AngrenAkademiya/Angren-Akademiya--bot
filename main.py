@@ -12,7 +12,6 @@ from aiohttp import web, ClientSession
 import openpyxl
 from openpyxl import Workbook
 from openpyxl.styles import Alignment
-from openpyxl.worksheet.page import PageMargins
 from aiogram.types import FSInputFile
 import gspread
 from google.oauth2.service_account import Credentials
@@ -28,13 +27,14 @@ dp = Dispatcher(storage=MemoryStorage())
 
 EXCEL_FILE = "students.xlsx"
 
+def save_to_excel(data):
+    from openpyxl.worksheet.page import PageMargins
 
-def save_to_excel(data, user_id):
     if not os.path.exists(EXCEL_FILE):
         wb = Workbook()
         ws = wb.active
         ws.title = "O'quvchilar"
-        ws.append(["№", "Sana", "Ism Familiya", "Tel Raqam", "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar", "ID"])
+        ws.append(["№", "Sana", "Ism Familiya", "Tel Raqam", "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar"])
         wb.save(EXCEL_FILE)
 
     wb = openpyxl.load_workbook(EXCEL_FILE)
@@ -56,12 +56,11 @@ def save_to_excel(data, user_id):
         data.get("grade"),
         data.get("filial"),
         data.get("time_pref"),
-        courses_string,
-        user_id
+        courses_string
     ])
 
     try:
-        col_widths = {1: 5, 2: 16, 3: 22, 4: 14, 5: 14, 6: 10, 7: 6, 8: 12, 9: 12, 10: 15, 11: 15}
+        col_widths = {1: 5, 2: 16, 3: 22, 4: 14, 5: 14, 6: 10, 7: 6, 8: 12, 9: 12, 10: 35}
         for col_num, width in col_widths.items():
             col_letter = openpyxl.utils.get_column_letter(col_num)
             ws.column_dimensions[col_letter].width = width
@@ -92,7 +91,7 @@ def save_to_excel(data, user_id):
     wb.save(EXCEL_FILE)
 
 
-def _write_to_google_sheets_sync(data, user_id):
+def _write_to_google_sheets_sync(data):
     now = datetime.now()
     sana = now.strftime("%d.%m.%Y %H:%M")
     bugun = now.strftime("%d.%m.%Y")
@@ -117,8 +116,8 @@ def _write_to_google_sheets_sync(data, user_id):
 
     sheet_url = os.getenv("GOOGLE_SHEET_URL")
     spreadsheet_id = os.getenv("SPREADSHEET_ID")
-if sheet_url:
-        spreadsheet = client.open_by_url(sheet_url)
+ if sheet_url:
+      spreadsheet = client.open_by_url(sheet_url)
     elif spreadsheet_id:
         spreadsheet = client.open_by_key(spreadsheet_id)
     else:
@@ -129,10 +128,10 @@ if sheet_url:
     try:
         sheet = spreadsheet.worksheet(bugun)
     except Exception:
-        sheet = spreadsheet.add_worksheet(title=bugun, rows=1000, cols=11)
+        sheet = spreadsheet.add_worksheet(title=bugun, rows=1000, cols=10)
         sheet.append_row([
             "№", "Sana", "Ism Familiya", "Tel Raqam",
-            "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar", "ID"
+            "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar"
         ])
 
     all_rows = sheet.get_all_values()
@@ -148,14 +147,13 @@ if sheet_url:
         data.get("grade"),
         data.get("filial"),
         data.get("time_pref"),
-        courses_string,
-        user_id
+        courses_string
     ])
 
 
-async def save_to_google_sheets(data, user_id):
+async def save_to_google_sheets(data):
     try:
-        await asyncio.to_thread(_write_to_google_sheets_sync, data, user_id)
+        await asyncio.to_thread(_write_to_google_sheets_sync, data)
         logging.info("Ma'lumotlar Google Sheets'ga muvaffaqiyatli yozildi!")
     except Exception as e:
         logging.exception("Google Sheets yozishda xato:")
@@ -179,7 +177,6 @@ class Registration(StatesGroup):
     filial = State()
     subjects = State()
     time_pref = State()
-
 
 AVAILABLE_FILIALS = ["Angren", "Ohangaron"]
 AVAILABLE_TIMES = ["Ertalabki", "Kunduzgi", "Kechki"]
@@ -207,7 +204,6 @@ def get_main_menu():
     kb.button(text="📈 Bilim darajasini tekshirish")
     kb.button(text="🚪 Davomat (Keldim/Ketdim)")
     kb.adjust(1, 2)
-    kb.button(text="👤 Shaxsiy kabinet")
     return kb.as_markup(resize_keyboard=True)
 
 
@@ -219,12 +215,9 @@ async def cmd_start(message: types.Message, state: FSMContext):
         "Kelajak akademiyasida o'z bilimingizni va farzandingiz kamolotini nazorat qiling.",
         reply_markup=get_main_menu()
     )
-
-
-@dp.message(F.text == "/help")
+ @dp.message(F.text == "/help")
 async def cmd_help(message: types.Message):
-    await message.answer("Sizga qanday yordam bera olaman?")
-
+    await message.answer("Sizga qanday yordam bera olaman?") 
 
 @dp.message(F.text == "/excel")
 async def send_excel(message: types.Message):
@@ -233,8 +226,6 @@ async def send_excel(message: types.Message):
         await message.answer_document(document=excel_doc, caption="📊 Angren Akademiya o'quvchilar ro'yxati (Excel)")
     else:
         await message.answer("❌ Hozircha ro'yxat bo'sh! Hech kim ro'yxatdan o'tmadi.")
-
-
 @dp.message(F.text == "📈 Bilim darajasini tekshirish")
 async def check_knowledge(message: types.Message):
     await message.answer(
@@ -254,8 +245,7 @@ async def attendance_menu(message: types.Message):
     kb.button(text="🔕 Ketdim", callback_data="attendance_out")
     kb.button(text="💰 Oylik to'lov holati", callback_data="attendance_pay")
     kb.button(text="🚀 Uzoq muddatli imtiyozlar", callback_data="attendance_promo")
-    kb.button(text="👤 Shaxsiy kabinet", callback_data="profile")
-    kb.adjust(2, 2, 1)
+    kb.adjust(2, 1, 1)
     await message.answer(
         "🚪 Angren Akademiyasi — Davomat va Shaxsiy Balans\n\nKerakli tugmani bosing:",
         reply_markup=kb.as_markup()
@@ -430,18 +420,14 @@ async def process_time_pref(message: types.Message, state: FSMContext):
     await state.update_data(time_pref=message.text)
     user_data = await state.get_data()
 
-    try:
-        save_to_excel(user_data, message.from_user.id)
-    except Exception:
-        logging.exception("Excel'ga yozishda xato:")
+    save_to_excel(user_data)
+    asyncio.create_task(save_to_google_sheets(user_data))
 
-    asyncio.create_task(save_to_google_sheets(user_data, message.from_user.id))
-selected_courses = user_data.get("selected_courses", [])
+    selected_courses = user_data.get("selected_courses", [])
     courses_output = "📚 Tanlangan kurslar:\n" + "".join(
         f"• {c.replace(chr(10), ' ')}\n" for c in selected_courses
     )
-
-    student_report = (
+ student_report = (
         f"Muvaffaqiyatli royxatdan o'tdingiz!\n\n"
         f"O'quvchi: {escape_markdown(user_data.get('name'))}\n"
         f"Maktab/Sinf: {escape_markdown(user_data.get('school'))}, {escape_markdown(user_data.get('grade'))}\n"
@@ -460,7 +446,7 @@ selected_courses = user_data.get("selected_courses", [])
                 parse_mode="Markdown",
                 reply_markup=get_main_menu()
             )
-        except Exception:
+        except Exception as e:
             logging.exception("Rasm yuborishda xato:")
             await message.answer(
                 text=student_report,
@@ -474,16 +460,6 @@ selected_courses = user_data.get("selected_courses", [])
             reply_markup=get_main_menu()
         )
     await state.clear()
-
-
-@dp.callback_query(F.data == "profile")
-async def profile_handler(callback: types.CallbackQuery):
-    await callback.message.answer("👤 Bu sizning Shaxsiy kabinetingiz.")
-
-
-@dp.callback_query(F.data == "cert")
-async def cert_handler(callback: types.CallbackQuery):
-    await callback.message.answer("🎓 Sertifikat yuklash bo‘limi.")
 
 
 async def handle_health(request):
