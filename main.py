@@ -115,21 +115,12 @@ def _write_to_google_sheets_sync(data):
 
     client = gspread.authorize(creds)
 
-    sheet_url = os.getenv("GOOGLE_SHEET_URL")
-    spreadsheet_id = os.getenv("SPREADSHEET_ID")
-
-if sheet_url:
+    if sheet_url:
         spreadsheet = client.open_by_url(sheet_url)
     elif spreadsheet_id:
         spreadsheet = client.open_by_key(spreadsheet_id)
     else:
         spreadsheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYlUn0/edit")
-
-    try:
-        sheet = spreadsheet.worksheet(bugun)
-    except Exception:
-        sheet = spreadsheet.add_worksheet(title=bugun, rows=1000, cols=10)
-        sheet.append_row([
             "№", "Sana", "Ism Familiya", "Tel Raqam",
             "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar"
         ])
