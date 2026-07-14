@@ -119,11 +119,11 @@ def _write_to_google_sheets_sync(data):
     spreadsheet_id = os.getenv("SPREADSHEET_ID")
 
 if sheet_url:
-        spreadsheet = client.open_by_url(sheet_url)
+    spreadsheet = client.open_by_url(sheet_url)
 elif spreadsheet_id:
-        spreadsheet = client.open_by_key(spreadsheet_id)
-    else:
-        spreadsheet = client.open
+    spreadsheet = client.open_by_key(spreadsheet_id)
+else:
+    spreadsheet = client.open
 _by_url(
             "https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYlUn0/edit"
         )
