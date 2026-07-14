@@ -117,7 +117,8 @@ def _write_to_google_sheets_sync(data):
 
     sheet_url = os.getenv("GOOGLE_SHEET_URL")
     spreadsheet_id = os.getenv("SPREADSHEET_ID")
- if sheet_url:
+
+    if sheet_url:
         spreadsheet = client.open_by_url(sheet_url)
     elif spreadsheet_id:
         spreadsheet = client.open_by_key(spreadsheet_id)
@@ -163,7 +164,7 @@ async def save_to_google_sheets(data):
             try:
                 await bot.send_message(
                     int(admin_id),
-                    f"Google Sheets xato: {type(e).name}: {e}"
+                    f"Google Sheets xato: {type(e).__name__}: {e}"
                 )
             except Exception:
                 pass
@@ -232,7 +233,7 @@ async def check_knowledge(message: types.Message):
     await message.answer(
         "📊 \"Angren Akademiya\" — Bilim Nazorati Tizimi\n\n"
         "✨ Yaqin kunlarda hammasi yanada mukammal boʻladi!\n\n"
-"Kelajakda farzandingiz bizning \"Angren Akademiya\" oʻquv markazimizni tanlaganda, "
+        "Kelajakda farzandingiz bizning \"Angren Akademiya\" oʻquv markazimizni tanlaganda, "
         "ushbu tugma orqali har bir ota-ona aynan oʻz farzandining ismi, darsdagi ishtiroki va "
         "haqiqiy imtihon natijalari bilan muntazam tanishib borish imkoniyatiga ega boʻladi.\n\n"
         "Biz kelajak texnologiyalarini taʼlimga olib kirmoqdamiz!"
@@ -322,6 +323,8 @@ async def process_parent_phone(message: types.Message, state: FSMContext):
     await state.update_data(parent_phone=message.text)
     await message.answer("🏫 Nechanchi maktabda o'qiysiz?")
     await state.set_state(Registration.school)
+
+
 @dp.message(Registration.school)
 async def process_school(message: types.Message, state: FSMContext):
     await state.update_data(school=message.text)
