@@ -564,5 +564,3 @@ async def profile_handler(callback: types.CallbackQuery):
         await callback.message.answer("👤 Shaxsiy kabinetingizga xush kelibsiz!\n\nℹ️ Hozircha tizimda sertifikatingiz aniqlanmadi.")
 if __name__ == "__main__":
     asyncio.run(main())
-
-
