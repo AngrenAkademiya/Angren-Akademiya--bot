@@ -499,7 +499,36 @@ async def process_time_pref(message: types.Message, state: FSMContext):
             parse_mode="Markdown",
             reply_markup=get_main_menu()
         )
-    await state.clear()
+    tabrik_kb = InlineKeyboardBuilder()
+    tabrik_kb.button(text="👥 Do'stimni taklif qilish", url="https://t.me/share/url?url=https://t.me/AngrenAkademiyaBot&text=Angren+Akademiyaga+qo%27shiling!")
+    tabrik_kb.button(text="📍 Angren Akademiya kanali", url="https://t.me/AngrenAkademiya")
+    tabrik_kb.adjust(1)
+    await message.answer(
+        f"🎉 Tabriklaymiz, {escape_markdown(user_data.get('name'))}!\n\n"
+        f"🎓 Sizga sertifikat berildi!\n"
+        f"Kelib Angren Akademiyadan olib keting!\n\n"
+        f"📚 Darslarimizga ishtirok etib voucherlarni qo'lga kiriting!\n\n"
+        f"🚀 O'z karyerangiz tomon — biz bilan qadam bosing!\n\n"
+        f"🎁 Do'stlaringizni taklif qiling:\n"
+        f"👉 1 ta do'st — 30 000 so'mlik voucher yoki sovg'a!\n"
+        f"👉 2 ta do'st — 40 000 so'mlik voucher yoki sovg'a!\n"
+        f"👉 3 va undan ko'p — 50 000 so'mlik voucher yoki sovg'alarni ham qo'lga kiriting!\n\n"
+        f"⚠️ Joylar cheklangan — imkoniyatlarni qo'ldan boy bermang!",
+        reply_markup=tabrik_kb.as_markup()
+    )
+    channel_id = os.getenv("CHANNEL_ID")
+    if channel_id:
+        try:
+            await bot.send_message(int(channel_id),
+                f"🆕 Yangi o'quvchi!\n"
+                f"👤 {user_data.get('name')}\n"
+                f"📞 {user_data.get('phone')}\n"
+                f"📍 {user_data.get('filial')} | {user_data.get('time_pref')}\n"
+                f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+            )
+        except Exception:
+            logging.exception("Kanalga xabar yuborishda xato:")
+            await state.clear()
 
 
 @dp.callback_query(F.data == "profile")
