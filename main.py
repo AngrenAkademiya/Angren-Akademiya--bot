@@ -447,7 +447,21 @@ async def process_time_pref(message: types.Message, state: FSMContext):
         logging.exception("Excel'ga yozishda xato:")
 
     asyncio.create_task(save_to_google_sheets(user_data, message.from_user.id))
-
+    admin_id = os.getenv("ADMIN_ID")
+    if admin_id:
+        admin_text = (
+            f"🆕 Yangi o'quvchi!\n"
+            f"👤 {user_data.get('name')}\n"
+            f"📞 {user_data.get('phone')}\n"
+            f"👨‍👩‍👦 Ota-ona: {user_data.get('parent_phone')}\n"
+            f"🏫 Maktab: {user_data.get('school')}, Sinf: {user_data.get('grade')}\n"
+            f"📍 Filial: {user_data.get('filial')} | Smena: {user_data.get('time_pref')}\n"
+            f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+        )
+        try:
+            await bot.send_message(int(admin_id), admin_text)
+        except Exception:
+            logging.exception("Admin xabarida xato:")
     selected_courses = user_data.get("selected_courses", [])
     courses_output = "📚 Tanlangan kurslar:\n" + "".join(
         f"• {c.replace(chr(10), ' ')}\n" for c in selected_courses
