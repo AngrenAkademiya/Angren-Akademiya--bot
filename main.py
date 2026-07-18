@@ -550,7 +550,7 @@ async def profile_handler(callback: types.CallbackQuery):
     f"🎓 Sertifikat: berildi ✅\n\n"
     f"🚀 O'z karyerangiz tomon — biz bilan qadam bosing!"
 )
-await callback.answer()
+
 
 
 @dp.callback_query(F.data == "cert")
