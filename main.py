@@ -533,7 +533,15 @@ async def process_time_pref(message: types.Message, state: FSMContext):
 
 @dp.callback_query(F.data == "profile")
 async def profile_handler(callback: types.CallbackQuery):
-    await callback.message.answer("👤 Bu sizning Shaxsiy kabinetingiz.")
+    await callback.message.answer(
+    f"👤 Sizning shaxsiy kabinetingiz\n\n"
+    f"💳 Voucher balansiz: 30 000 so'm\n"
+    f"⚡️ Darslarni boshlashingiz bilan faollashadi!\n\n"
+    f"👥 Taklif qilgan do'stlar: 0 ta\n"
+    f"🎓 Sertifikat: berildi ✅\n\n"
+    f"🚀 O'z karyerangiz tomon — biz bilan qadam bosing!"
+)
+await callback.answer()
 
 
 @dp.callback_query(F.data == "cert")
