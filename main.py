@@ -549,7 +549,7 @@ async def process_time_pref(message: types.Message, state: FSMContext):
         except Exception:
             logging.exception("Kanalga xabar yuborishda xato:")
             await state.clear()
-try:
+        try:
             cert_path = generate_certificate(user_data.get("name"), message.from_user.id)
             await message.answer_photo(
                 photo=FSInputFile(cert_path),
