@@ -16,7 +16,7 @@ from openpyxl.worksheet.page import PageMargins
 from aiogram.types import FSInputFile
 import gspread
 from google.oauth2.service_account import Credentials
-
+from PIL import Image, ImageDraw, ImageFont
 logging.basicConfig(level=logging.INFO)
 
 API_TOKEN = os.getenv("BOT_TOKEN")
@@ -28,7 +28,27 @@ dp = Dispatcher(storage=MemoryStorage())
 
 EXCEL_FILE = "students.xlsx"
 
+def generate_certificate(full_name: str, user_id: int) -> str:
+    template = Image.open("certificate_template.png").convert("RGB")
+    draw = ImageDraw.Draw(template)
+    font = ImageFont.truetype(
+        "/usr/share/fonts/truetype/liberation/LiberationSerif-BoldItalic.ttf", 64
+    )
+    text = full_name.upper()
+    bbox = draw.textbbox((0, 0), text, font=font)
+    w = bbox[2] - bbox[0]
+    x = (template.width - w) / 2
+    y = 555
+    draw.text((x, y), text, font=font, fill=(255, 255, 255))
 
+    date_text = datetime.now().strftime("%d.%m.%Y")
+    draw.text((160, template.height - 195), f"Sana: {date_text}",
+              font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24),
+              fill=(180, 180, 180))
+
+    out_path = f"cert_{user_id}.png"
+    template.save(out_path)
+    return out_path
 def save_to_excel(data, user_id):
     if not os.path.exists(EXCEL_FILE):
         wb = Workbook()
