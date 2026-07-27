@@ -32,18 +32,18 @@ def generate_certificate(full_name: str, user_id: int) -> str:
     template = Image.open("certificate_template.png").convert("RGB")
     draw = ImageDraw.Draw(template)
     font = ImageFont.truetype(
-        "/usr/share/fonts/truetype/liberation/LiberationSerif-BoldItalic.ttf", 64
+        "/usr/share/fonts/truetype/liberation/LiberationSerif-BoldItalic.ttf", 42
     )
     text = full_name.upper()
     bbox = draw.textbbox((0, 0), text, font=font)
     w = bbox[2] - bbox[0]
     x = (template.width - w) / 2
-    y = 555
+    y = 470
     draw.text((x, y), text, font=font, fill=(255, 255, 255))
 
     date_text = datetime.now().strftime("%d.%m.%Y")
-    draw.text((160, template.height - 195), f"Sana: {date_text}",
-              font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24),
+    draw.text((100, template.height - 60), f"Sana: {date_text}",
+              font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24))
               fill=(180, 180, 180))
 
     out_path = f"cert_{user_id}.png"
