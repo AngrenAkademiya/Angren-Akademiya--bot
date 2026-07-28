@@ -17,6 +17,7 @@ from aiogram.types import FSInputFile
 import gspread
 from google.oauth2.service_account import Credentials
 from PIL import Image, ImageDraw, ImageFont
+import qrcode
 logging.basicConfig(level=logging.INFO)
 
 API_TOKEN = os.getenv("BOT_TOKEN")
@@ -38,13 +39,20 @@ def generate_certificate(full_name: str, user_id: int) -> str:
     bbox = draw.textbbox((0, 0), text, font=font)
     w = bbox[2] - bbox[0]
     x = (template.width - w) / 2
-    y = 470
+    y = 520  # 470 dan 520 ga tushirildi — chiziq ustiga to'g'ri kelishi uchun
     draw.text((x, y), text, font=font, fill=(255, 255, 255))
 
     date_text = datetime.now().strftime("%d.%m.%Y")
-    draw.text((100, template.height - 60), f"Sana: {date_text}",
-              font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24))
-              fill=(180, 180, 180))
+    draw.text(
+        (100, template.height - 60), f"Sana: {date_text}",
+        font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24),
+        fill=(180, 180, 180)
+    )
+
+    # QR kod — shaxsiy kabinetga olib boradi
+    qr_link = f"https://t.me/SIZNING_BOT_USERNAME?start=cabinet_{user_id}"
+    qr_img = qrcode.make(qr_link).resize((140, 140))
+    template.paste(qr_img, (template.width - 220, 260))
 
     out_path = f"cert_{user_id}.png"
     template.save(out_path)
