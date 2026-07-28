@@ -39,7 +39,7 @@ def generate_certificate(full_name: str, user_id: int) -> str:
     bbox = draw.textbbox((0, 0), text, font=font)
     w = bbox[2] - bbox[0]
     x = (template.width - w) / 2
-    y = 520  # 470 dan 520 ga tushirildi — chiziq ustiga to'g'ri kelishi uchun
+    y = 340  # 470 dan 520 ga tushirildi — chiziq ustiga to'g'ri kelishi uchun
     draw.text((x, y), text, font=font, fill=(255, 255, 255))
 
     date_text = datetime.now().strftime("%d.%m.%Y")
