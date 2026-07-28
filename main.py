@@ -49,7 +49,7 @@ def generate_certificate(full_name: str, user_id: int) -> str:
         fill=(180, 180, 180)
     )
 
-    # QR kod — shaxsiy kabinetga olib boradi
+    qr_link = f"https://t.me/AngrenAkademiyaBot?start=cabinet_{user_id}"
     qr_link = f"https://t.me/SIZNING_BOT_USERNAME?start=cabinet_{user_id}"
     qr_img = qrcode.make(qr_link).resize((140, 140))
     template.paste(qr_img, (template.width - 220, 260))
