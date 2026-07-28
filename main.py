@@ -544,6 +544,16 @@ async def process_time_pref(message: types.Message, state: FSMContext):
         f"⚠️ Joylar cheklangan — imkoniyatlarni qo'ldan boy bermang!",
         reply_markup=tabrik_kb.as_markup()
     )
+    try:
+        cert_path = generate_certificate(user_data.get("name"), message.from_user.id)
+        await message.answer_photo(
+            photo=FSInputFile(cert_path),
+            caption="🎓 Tabriklaymiz! Sizning shaxsiy sertifikatingiz tayyor."
+        )
+        os.remove(cert_path)
+    except Exception:
+        logging.exception("Sertifikat generatsiyasida xato:")
+
     channel_id = os.getenv("CHANNEL_ID")
     if channel_id:
         try:
@@ -556,16 +566,8 @@ async def process_time_pref(message: types.Message, state: FSMContext):
             )
         except Exception:
             logging.exception("Kanalga xabar yuborishda xato:")
-            await state.clear()
-        try:
-            cert_path = generate_certificate(user_data.get("name"), message.from_user.id)
-            await message.answer_photo(
-                photo=FSInputFile(cert_path),
-                caption="🎓 Tabriklaymiz! Sizning shaxsiy sertifikatingiz tayyor."
-            )
-            os.remove(cert_path)
-        except Exception:
-            logging.exception("Sertifikat generatsiyasida xato:")
+
+    await state.clear()
 @dp.message(F.text == "👤 Shaxsiy kabinet")
 async def shaxsiy_kabinet(message: types.Message):
     await message.answer(
