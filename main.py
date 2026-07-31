@@ -359,15 +359,121 @@ async def send_excel(message: types.Message):
 
 
 @dp.message(F.text == "📈 Bilim darajasini tekshirish")
-async def check_knowledge(message: types.Message):
+async def check_knowledge(message: types.Message, state: FSMContext):
+    kb = InlineKeyboardBuilder()
+    for subject in TEST_SUBJECTS:
+        kb.button(text=subject, callback_data=f"test_subj_{subject}")
+    kb.adjust(1)
+    await message.answer("📚 Qaysi fandan test topshirmoqchisiz?", reply_markup=kb.as_markup())
+    await state.set_state(TestQuiz.subject)
+
+
+@dp.callback_query(TestQuiz.subject, F.data.startswith("test_subj_"))
+async def choose_grade(callback: types.CallbackQuery, state: FSMContext):
+    subject = callback.data.replace("test_subj_", "")
+    await state.update_data(subject=subject, score=0, q_index=0)
+
+    kb = InlineKeyboardBuilder()
+    for grade in range(1, 8):
+        kb.button(text=f"{grade}-sinf", callback_data=f"test_grade_{grade}")
+    kb.adjust(4, 3)
+    await callback.message.edit_text("🎓 Sinfingizni tanlang:", reply_markup=kb.as_markup())
+    await state.set_state(TestQuiz.grade)
+    await callback.answer()
+
+
+@dp.callback_query(TestQuiz.grade, F.data.startswith("test_grade_"))
+async def start_questions(callback: types.CallbackQuery, state: FSMContext):
+    grade = int(callback.data.replace("test_grade_", ""))
+    data = await state.get_data()
+    subject = data["subject"]
+    questions = TEST_SUBJECTS[subject][grade]
+
+    await state.update_data(grade=grade, questions=questions, q_index=0, score=0)
+    await state.set_state(TestQuiz.question)
+    await callback.answer()
+    await send_question(callback.message, state)
+
+
+async def send_question(message, state: FSMContext):
+    data = await state.get_data()
+    q_index = data["q_index"]
+    questions = data["questions"]
+
+    if q_index >= len(questions):
+        await finish_test(message, state)
+        return
+
+    question = questions[q_index]
+    kb = InlineKeyboardBuilder()
+    for idx, option in enumerate(question["options"]):
+        kb.button(text=option, callback_data=f"test_ans_{idx}")
+    kb.adjust(2)
+
     await message.answer(
-        "📊 \"Angren Akademiya\" — Bilim Nazorati Tizimi\n\n"
-        "✨ Yaqin kunlarda hammasi yanada mukammal boʻladi!\n\n"
-        "Kelajakda farzandingiz bizning \"Angren Akademiya\" oʻquv markazimizni tanlaganda, "
-        "ushbu tugma orqali har bir ota-ona aynan oʻz farzandining ismi, darsdagi ishtiroki va "
-        "haqiqiy imtihon natijalari bilan muntazam tanishib borish imkoniyatiga ega boʻladi.\n\n"
-        "Biz kelajak texnologiyalarini taʼlimga olib kirmoqdamiz!"
+        f"❓ Savol {q_index + 1}/{len(questions)}:\n\n{question['q']}",
+        reply_markup=kb.as_markup()
     )
+
+
+@dp.callback_query(TestQuiz.question, F.data.startswith("test_ans_"))
+async def process_answer(callback: types.CallbackQuery, state: FSMContext):
+    chosen = int(callback.data.replace("test_ans_", ""))
+    data = await state.get_data()
+    q_index = data["q_index"]
+    questions = data["questions"]
+    score = data["score"]
+
+    correct = questions[q_index]["correct"]
+    if chosen == correct:
+        score += 1
+        await callback.answer("✅ To'g'ri!")
+    else:
+        correct_text = questions[q_index]["options"][correct]
+        await callback.answer(f"❌ Xato! To'g'ri javob: {correct_text}", show_alert=True)
+
+    await state.update_data(score=score, q_index=q_index + 1)
+    await send_question(callback.message, state)
+
+
+async def finish_test(message, state: FSMContext):
+    data = await state.get_data()
+    score = data["score"]
+    questions = data["questions"]
+    subject = data["subject"]
+    grade = data["grade"]
+    total = len(questions)
+    percent = int((score / total) * 100)
+
+    filename, title = get_diploma_tier(percent)
+
+    result_text = (
+        f"🎉 Test yakunlandi!\n\n"
+        f"📊 Natija: {score}/{total} ({percent}%)\n"
+    )
+
+    if title:
+        result_text += f"\n🏅 Siz \"{title}\" nominatsiyasiga munosib bo'ldingiz!"
+    else:
+        result_text += "\n💪 Yana urinib ko'ring, natijangizni yaxshilay olasiz!"
+
+    await message.answer(result_text, reply_markup=get_main_menu())
+
+    if filename:
+        user_data = await state.get_data()
+        full_name = message.chat.first_name or "O'quvchi"
+        try:
+            diploma_path = generate_diploma(full_name, f"{subject} ({grade}-sinf)", percent, message.chat.id)
+            if diploma_path:
+   await message.answer_photo(
+                    photo=FSInputFile(diploma_path),
+                    caption=f"🏅 \"{title}\" — Maqtov yorlig'ingiz tayyor!"
+                )
+                os.remove(diploma_path)
+        except Exception:
+            logging.exception("Diplom generatsiyasida xato:")
+
+    await state.clear()
 
 
 @dp.message(F.text == "🚪 Davomat (Keldim/Ketdim)")
