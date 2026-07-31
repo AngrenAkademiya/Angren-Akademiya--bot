@@ -228,7 +228,7 @@ AVAILABLE_SUBJECTS = [
     "Ona tili va adabiyoti - Majburiy blok uchun",
     "Maktabga tayyorlov. Pochemuchka"
 ]
-    class TestQuiz(StatesGroup):
+class TestQuiz(StatesGroup):
     subject = State()
     grade = State()
     question = State()
