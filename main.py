@@ -228,7 +228,101 @@ AVAILABLE_SUBJECTS = [
     "Ona tili va adabiyoti - Majburiy blok uchun",
     "Maktabga tayyorlov. Pochemuchka"
 ]
+    class TestQuiz(StatesGroup):
+    subject = State()
+    grade = State()
+    question = State()
 
+MATH_QUESTIONS = {
+    1: [
+        {"q": "2+3=?", "options": ["4","5","6","7"], "correct": 1},
+        {"q": "7-2=?", "options": ["4","5","6","3"], "correct": 1},
+        {"q": "1+1=?", "options": ["1","2","3","4"], "correct": 1},
+        {"q": "9-4=?", "options": ["3","4","5","6"], "correct": 2},
+        {"q": "5+4=?", "options": ["7","8","9","10"], "correct": 2},
+        {"q": "10-6=?", "options": ["3","4","5","6"], "correct": 1},
+        {"q": "6+3=?", "options": ["8","9","10","7"], "correct": 1},
+        {"q": "8-5=?", "options": ["2","3","4","5"], "correct": 1},
+        {"q": "4+4+1=?", "options": ["8","9","10","7"], "correct": 1},
+        {"q": "10-3-2=?", "options": ["4","5","6","3"], "correct": 1},
+    ],
+    2: [
+        {"q": "12+7=?", "options": ["18","19","20","17"], "correct": 1},
+        {"q": "15-8=?", "options": ["6","7","8","9"], "correct": 1},
+        {"q": "6×2=?", "options": ["10","12","14","8"], "correct": 1},
+        {"q": "20-9=?", "options": ["10","11","12","9"], "correct": 1},
+        {"q": "9+9=?", "options": ["16","17","18","19"], "correct": 2},
+        {"q": "4×5=?", "options": ["18","20","22","16"], "correct": 1},
+        {"q": "36-18=?", "options": ["16","17","18","19"], "correct": 2},
+        {"q": "7×3=?", "options": ["19","20","21","22"], "correct": 2},
+        {"q": "45+27=?", "options": ["70","71","72","73"], "correct": 2},
+        {"q": "60-24=?", "options": ["34","35","36","37"], "correct": 2},
+    ],
+    3: [
+        {"q": "8×7=?", "options": ["54","55","56","57"], "correct": 2},
+        {"q": "63÷9=?", "options": ["6","7","8","9"], "correct": 1},
+        {"q": "100-45=?", "options": ["54","55","56","57"], "correct": 1},
+        {"q": "9×6=?", "options": ["52","53","54","55"], "correct": 2},
+        {"q": "72÷8=?", "options": ["7","8","9","10"], "correct": 2},
+        {"q": "125+237=?", "options": ["360","361","362","363"], "correct": 2},
+        {"q": "84÷7=?", "options": ["11","12","13","14"], "correct": 1},
+        {"q": "15×3=?", "options": ["43","44","45","46"], "correct": 2},
+        {"q": "500-268=?", "options": ["230","231","232","233"], "correct": 2},
+        {"q": "96÷8÷2=?", "options": ["5","6","7","8"], "correct": 1},
+    ],
+    4: [
+        {"q": "234+567=?", "options": ["799","800","801","802"], "correct": 2},
+        {"q": "12×12=?", "options": ["142","143","144","145"], "correct": 2},
+        {"q": "900÷30=?", "options": ["28","29","30","31"], "correct": 2},
+        {"q": "1000-456=?", "options": ["543","544","545","546"], "correct": 1},
+        {"q": "15×20=?", "options": ["280","290","300","310"], "correct": 2},
+        {"q": "3/4 + 1/4 = ?", "options": ["1/2","3/4","1","5/4"], "correct": 2},
+        {"q": "6.5+3.2=?", "options": ["9.5","9.6","9.7","9.8"], "correct": 2},
+        {"q": "144÷12=?", "options": ["11","12","13","14"], "correct": 1},
+        {"q": "Tomoni 6 sm kvadrat perimetri?", "options": ["18","20","22","24"], "correct": 3},
+        {"q": "2500÷25=?", "options": ["90","95","100","105"], "correct": 2},
+    ],
+    5: [
+        {"q": "3/5 + 1/5 = ?", "options": ["2/5","4/5","3/10","1"], "correct": 1},
+        {"q": "25% dan 200 necha?", "options": ["40","45","50","55"], "correct": 2},
+        {"q": "7² = ?", "options": ["14","42","49","56"], "correct": 2},
+        {"q": "0.75 ni foizga aylantiring", "options": ["65%","70%","75%","80%"], "correct": 2},
+        {"q": "18×15=?", "options": ["260","270","280","290"], "correct": 1},
+        {"q": "To'g'ri to'rtburchak yuzi: 8×5=?", "options": ["35","38","40","42"], "correct": 2},
+        {"q": "-5+8=?", "options": ["2","3","4","13"], "correct": 1},
+        {"q": "2/3 ning 1/2 qismi?", "options": ["1/6","1/3","2/6","3/5"], "correct": 1},
+        {"q": "144 ning kvadrat ildizi?", "options": ["11","12","13","14"], "correct": 1},
+        {"q": "3x=27, x=?", "options": ["7","8","9","10"], "correct": 2},
+    ],
+    6: [
+        {"q": "-8+(-5)=?", "options": ["-13","-3","3","13"], "correct": 0},
+        {"q": "2x+5=15, x=?", "options": ["4","5","6","7"], "correct": 1},
+        {"q": "40% dan 350 necha?", "options": ["130","135","140","145"], "correct": 2},
+        {"q": "(-3)×(-4)=?", "options": ["-12","-7","7","12"], "correct": 3},
+        {"q": "15/20 ni qisqartiring", "options": ["3/4","1/2","4/5","2/3"], "correct": 0},
+        {"q": "Radiusi 7 bo'lgan aylananing diametri?", "options": ["10","12","14","16"], "correct": 2},
+        {"q": "5²-3²=?", "options": ["14","16","18","20"], "correct": 1},
+        {"q": "3:4 = 15:x, x=?", "options": ["18","19","20","21"], "correct": 2},
+        {"q": "-12÷4=?", "options": ["-4","-3","3","4"], "correct": 1},
+        {"q": "2(x+3)=16, x=?", "options": ["4","5","6","7"], "correct": 1},
+    ],
+    7: [
+        {"q": "3x-7=14, x=?", "options": ["5","6","7","8"], "correct": 2},
+        {"q": "(x+2)(x-2)=?", "options": ["x²-4","x²+4","x²-2x","2x"], "correct": 0},
+        {"q": "Ikki burchak yig'indisi 90°, biri 35°. Ikkinchisi?", "options": ["45","55","60","65"], "correct": 1},
+        {"q": "2⁵=?", "options": ["16","32","64","10"], "correct": 1},
+        {"q": "y=2x+1, x=3 bo'lsa y=?", "options": ["5","6","7","8"], "correct": 2},
+        {"q": "√81=?", "options": ["7","8","9","10"], "correct": 2},
+        {"q": "Uchburchak ichki burchaklar yig'indisi?", "options": ["90","180","270","360"], "correct": 1},
+        {"q": "-3x=12, x=?", "options": ["-4","-3","3","4"], "correct": 0},
+        {"q": "5(2x-1)=45, x=?", "options": ["4","5","6","7"], "correct": 1},
+        {"q": "x/6=4/8, x=?", "options": ["2","3","4","5"], "correct": 1},
+    ],
+}
+
+TEST_SUBJECTS = {
+    "Matematika": MATH_QUESTIONS,
+}
 
 def get_main_menu():
     kb = ReplyKeyboardBuilder()
