@@ -464,8 +464,8 @@ async def finish_test(message, state: FSMContext):
         full_name = message.chat.first_name or "O'quvchi"
         try:
             diploma_path = generate_diploma(full_name, f"{subject} ({grade}-sinf)", percent, message.chat.id)
-            if diploma_path:
-   await message.answer_photo(
+    if diploma_path:
+                await message.answer_photo(
                     photo=FSInputFile(diploma_path),
                     caption=f"🏅 \"{title}\" — Maqtov yorlig'ingiz tayyor!"
                 )
