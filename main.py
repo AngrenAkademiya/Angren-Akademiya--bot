@@ -462,12 +462,12 @@ async def finish_test(message, state: FSMContext):
     if filename:
         user_data = await state.get_data()
         full_name = message.chat.first_name or "O'quvchi"
-        try:
+    try:
             diploma_path = generate_diploma(full_name, f"{subject} ({grade}-sinf)", percent, message.chat.id)
     if diploma_path:
                 await message.answer_photo(
-                    photo=FSInputFile(diploma_path),
-                    caption=f"🏅 \"{title}\" — Maqtov yorlig'ingiz tayyor!"
+                photo=FSInputFile(diploma_path),
+                caption=f"🏅 \"{title}\" — Maqtov yorlig'ingiz tayyor!"
                 )
                 os.remove(diploma_path)
         except Exception:
