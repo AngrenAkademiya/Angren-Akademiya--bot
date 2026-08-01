@@ -59,9 +59,9 @@ def generate_certificate(full_name: str, user_id: int) -> str:
     return out_path
  
 DIPLOMA_TIERS = [
-    (100, "mutlaq_golib.png", "MUTLAQ G'OLIB"),
-    (95, "alo_darajali.png", "A'LO DARAJALI O'QUVCHI"),
-    (90, "faol_iqtidorli.png", "FAOL VA IQTIDORLI O'QUVCHI"),
+    (100, "mutlaq_g'olib.png", "MUTLAQ G'OLIB"),
+    (95, "a'lo_darajali.png", "A'LO DARAJALI O'QUVCHI"),
+    (90, "faol_va_iqtidorli.png", "FAOL VA IQTIDORLI O'QUVCHI"),
     (85, "iqtidorli.png", "IQTIDORLI O'QUVCHI"),
     (70, "bilimga_intiluvchi.png", "BILIMGA INTILUVCHI O'QUVCHI"),
 ]
