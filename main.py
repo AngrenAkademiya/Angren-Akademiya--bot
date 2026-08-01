@@ -57,6 +57,53 @@ def generate_certificate(full_name: str, user_id: int) -> str:
     out_path = f"cert_{user_id}.png"
     template.save(out_path)
     return out_path
+    DIPLOMA_TIERS = [
+    (100, "mutlaq_golib.png", "MUTLAQ G'OLIB"),
+    (95, "alo_darajali.png", "A'LO DARAJALI O'QUVCHI"),
+    (90, "faol_iqtidorli.png", "FAOL VA IQTIDORLI O'QUVCHI"),
+    (85, "iqtidorli.png", "IQTIDORLI O'QUVCHI"),
+    (70, "bilimga_intiluvchi.png", "BILIMGA INTILUVCHI O'QUVCHI"),
+]
+
+
+def get_diploma_tier(percent: int):
+    for min_percent, filename, title in DIPLOMA_TIERS:
+        if percent >= min_percent:
+            return filename, title
+    return None, None
+
+
+def generate_diploma(full_name: str, subject: str, percent: int, user_id: int) -> str:
+    filename, title = get_diploma_tier(percent)
+    if not filename:
+        return None
+
+    template = Image.open(filename).convert("RGB")
+    draw = ImageDraw.Draw(template)
+
+    name_font = ImageFont.truetype(
+        "/usr/share/fonts/truetype/liberation/LiberationSerif-BoldItalic.ttf", 28
+    )
+    subject_font = ImageFont.truetype(
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 20
+    )
+
+    name_text = full_name.upper()
+    bbox = draw.textbbox((0, 0), name_text, font=name_font)
+    w = bbox[2] - bbox[0]
+    x = (template.width - w) / 2
+    y = int(template.height * 0.38)
+    draw.text((x, y), name_text, font=name_font, fill=(20, 20, 90))
+
+    bbox2 = draw.textbbox((0, 0), subject, font=subject_font)
+    w2 = bbox2[2] - bbox2[0]
+    x2 = (template.width - w2) / 2
+    y2 = int(template.height * 0.47)
+    draw.text((x2, y2), subject, font=subject_font, fill=(20, 20, 90))
+
+    out_path = f"diploma_{user_id}.png"
+    template.save(out_path)
+    return out_path
 def save_to_excel(data, user_id):
     if not os.path.exists(EXCEL_FILE):
         wb = Workbook()
