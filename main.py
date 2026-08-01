@@ -460,23 +460,20 @@ async def finish_test(message, state: FSMContext):
     await message.answer(result_text, reply_markup=get_main_menu())
 
     if filename:
-    user_data = await state.get_data()
-    full_name = message.chat.first_name or "O'quvchi"
-    try:
-        diploma_path = generate_diploma(
-            full_name, f"{subject} ({grade}-sinf)", percent, message.chat.id
-        )
-        if diploma_path:
-            await message.answer_photo(
-                photo=FSInputFile(diploma_path),
-                caption=f"🏅 \"{title}\" — Maqtov yorlig'ingiz tayyor!"
-            )
-            os.remove(diploma_path)
-    except Exception:
-        logging.exception("Diplom generatsiyasida xato:")
+        user_data = await state.get_data()
+        full_name = message.chat.first_name or "O'quvchi"
+        try:
+            diploma_path = generate_diploma(full_name, f"{subject} ({grade}-sinf)", percent, message.chat.id)
+            if diploma_path:
+                await message.answer_photo(
+                    photo=FSInputFile(diploma_path),
+                    caption=f"🏅 \"{title}\" — Maqtov yorlig'ingiz tayyor!"
+                )
+                os.remove(diploma_path)
+        except Exception:
+            logging.exception("Diplom generatsiyasida xato:")
 
-await state.clear()
-
+    await state.clear()
 
 @dp.message(F.text == "🚪 Davomat (Keldim/Ketdim)")
 async def attendance_menu(message: types.Message):
