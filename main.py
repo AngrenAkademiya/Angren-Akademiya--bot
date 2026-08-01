@@ -57,7 +57,8 @@ def generate_certificate(full_name: str, user_id: int) -> str:
     out_path = f"cert_{user_id}.png"
     template.save(out_path)
     return out_path
-    DIPLOMA_TIERS = [
+ 
+DIPLOMA_TIERS = [
     (100, "mutlaq_golib.png", "MUTLAQ G'OLIB"),
     (95, "alo_darajali.png", "A'LO DARAJALI O'QUVCHI"),
     (90, "faol_iqtidorli.png", "FAOL VA IQTIDORLI O'QUVCHI"),
@@ -103,7 +104,7 @@ def generate_diploma(full_name: str, subject: str, percent: int, user_id: int) -
 
     out_path = f"diploma_{user_id}.png"
     template.save(out_path)
-    return out_path
+    return out_path  
 def save_to_excel(data, user_id):
     if not os.path.exists(EXCEL_FILE):
         wb = Workbook()
