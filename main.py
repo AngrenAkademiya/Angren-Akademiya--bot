@@ -63,6 +63,7 @@ DIPLOMA_TIERS = [
     (95, "a'lo_darajali.png", "A'LO DARAJALI O'QUVCHI"),
     (90, "faol_va_iqtidorli.png", "FAOL VA IQTIDORLI O'QUVCHI"),
     (85, "iqtidorli.png", "IQTIDORLI O'QUVCHI"),
+    (80, "bilimdon.png",  "BILIMDON O'QUVCHI"),
     (70, "bilimga_intiluvchi.png", "BILIMGA INTILUVCHI O'QUVCHI"),
 ]
 
