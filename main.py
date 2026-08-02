@@ -521,7 +521,7 @@ async def finish_test(message, state: FSMContext):
 
     if filename:
         user_data = await state.get_data()
-        full_name = message.chat.first_name or "O'quvchi"
+        full_name = find_full_name_by_id(message.chat.id) or message.chat.first_name or "O'quvchi"
         try:
             diploma_path = generate_diploma(full_name, f"{subject} ({grade}-sinf)", percent, message.chat.id)
             if diploma_path:
