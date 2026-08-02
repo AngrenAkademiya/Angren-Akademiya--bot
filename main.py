@@ -95,7 +95,7 @@ def generate_diploma(full_name: str, subject: str, percent: int, user_id: int) -
     w = bbox[2] - bbox[0]
     x = (template.width - w) / 2
     y = int(template.height * 0.44)
-    draw.text((x, y), name_text, font=name_font, fill=(20, 20, 90))
+    draw.text((x, y), name_text, font=name_font, fill=(20, 110, 60))
 
     bbox2 = draw.textbbox((0, 0), subject, font=subject_font)
     w2 = bbox2[2] - bbox2[0]
