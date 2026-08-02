@@ -84,10 +84,10 @@ def generate_diploma(full_name: str, subject: str, percent: int, user_id: int) -
     draw = ImageDraw.Draw(template)
 
     name_font = ImageFont.truetype(
-        "/usr/share/fonts/truetype/liberation/LiberationSerif-BoldItalic.ttf", 28
+        "/usr/share/fonts/truetype/liberation/LiberationSerif-BoldItalic.ttf", 36
     )
     subject_font = ImageFont.truetype(
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 20
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 26
     )
 
     name_text = full_name.upper()
