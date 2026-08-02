@@ -111,7 +111,7 @@ def generate_diploma(full_name: str, subject: str, percent: int, user_id: int) -
     bbox2 = draw.textbbox((0, 0), subject, font=subject_font)
     w2 = bbox2[2] - bbox2[0]
     x2 = (template.width - w2) / 2
-    y2 = int(template.height * 0.60)
+    y2 = int(template.height * 0.575)
     draw.text((x2, y2), subject, font=subject_font, fill=(184, 134, 11))
 
     out_path = f"diploma_{user_id}.png"
