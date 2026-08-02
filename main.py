@@ -74,6 +74,17 @@ def get_diploma_tier(percent: int):
             return filename, title
     return None, None
 
+def find_full_name_by_id(user_id: int) -> str:
+    try:
+        wb = openpyxl.load_workbook(EXCEL_FILE)
+        ws = wb.active
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if row[10] == user_id:
+                return row[2]
+    except Exception:
+        logging.exception("Ism qidirishda xato:")
+    return None
+
 
 def generate_diploma(full_name: str, subject: str, percent: int, user_id: int) -> str:
     filename, title = get_diploma_tier(percent)
