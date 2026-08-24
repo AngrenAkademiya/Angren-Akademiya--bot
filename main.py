@@ -384,7 +384,145 @@ MATH_QUESTIONS = {
 TEST_SUBJECTS = {
     "Matematika": MATH_QUESTIONS,
 }
+class DiagnosticTest(StatesGroup):
+    question = State()
 
+QIYINLIK_HARFLAR = {"A": 0, "B": 1, "C": 2, "D": 3}
+DIAGNOSTIC_CACHE = {}
+
+def _load_diagnostic_sync(grade: int):
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds_json = os.getenv("GOOGLE_CREDS")
+    creds_data = json.loads(creds_json)
+    creds = Credentials.from_service_account_info(creds_data, scopes=scopes)
+    client = gspread.authorize(creds)
+
+    tests_sheet_url = os.getenv("TESTS_SHEET_URL")
+    spreadsheet = client.open_by_url(tests_sheet_url)
+    sheet_name = f"kimyo_{grade}sinf_diagnostik"
+    sheet = spreadsheet.worksheet(sheet_name)
+    rows = sheet.get_all_records()
+
+    levels = {"oson": [], "orta": [], "murakkab": []}
+    for row in rows:
+        try:
+            qiyinlik = str(row.get("Qiyinlik", "")).strip().lower()
+            savol = str(row.get("Savol", "")).strip()
+            options = [
+                str(row.get("A", "")),
+                str(row.get("B", "")),
+                str(row.get("C", "")),
+                str(row.get("D", "")),
+            ]
+            togri_harf = str(row.get("TogriJavob", "")).strip().upper()
+            correct_idx = QIYINLIK_HARFLAR.get(togri_harf)
+            izoh = str(row.get("Izoh", "")).strip()
+            if correct_idx is None or qiyinlik not in levels:
+                continue
+            levels[qiyinlik].append({
+                "q": savol, "options": options,
+                "correct": correct_idx, "izoh": izoh
+            })
+        except Exception:
+            logging.exception(f"Diagnostik qator xatosi: {row}")
+            continue
+    return levels
+
+def get_diagnostic_questions(grade: int):
+    if grade not in DIAGNOSTIC_CACHE:
+        DIAGNOSTIC_CACHE[grade] = _load_diagnostic_sync(grade)
+    levels = DIAGNOSTIC_CACHE[grade]
+    selected = []
+    for level in ("oson", "orta", "murakkab"):
+        pool = levels.get(level, [])
+        count = min(5, len(pool))
+        selected.extend(random.sample(pool, count))
+    random.shuffle(selected)
+    return selected
+
+async def start_diagnostic_test(message: types.Message, state: FSMContext, grade: int):
+    try:
+        questions = await asyncio.to_thread(get_diagnostic_questions, grade)
+    except Exception:
+        logging.exception("Diagnostik testni yuklashda xato:")
+        await message.answer("⚠️ Diagnostik testni hozircha yuklab bo'lmadi, keyinroq urinib ko'ring.")
+        return
+
+    if not questions:
+        await message.answer("⚠️ Bu sinf uchun diagnostik savollar hali tayyor emas.")
+        return
+
+    await state.update_data(diag_questions=questions, diag_index=0, diag_score=0, diag_wrong=[])
+    await state.set_state(DiagnosticTest.question)
+    await message.answer(
+        "📊 Endi Kimyo fanidan boshlang'ich diagnostik testni yechasiz — 15 ta savol.\n"
+        "Bu sizning bilim darajangizni aniqlash uchun kerak. Boshladik!"
+    )
+    await send_diagnostic_question(message, state)
+
+async def send_diagnostic_question(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    questions = data["diag_questions"]
+    idx = data["diag_index"]
+    q = questions[idx]
+
+    kb = InlineKeyboardBuilder()
+    letters = ["A", "B", "C", "D"]
+    for i, opt in enumerate(q["options"]):
+        kb.button(text=f"{letters[i]}) {opt}", callback_data=f"diag_ans_{i}")
+    kb.adjust(1)
+
+    await message.answer(
+        f"❓ Savol {idx+1}/{len(questions)}:\n\n{q['q']}",
+        reply_markup=kb.as_markup()
+    )
+
+@dp.callback_query(DiagnosticTest.question, F.data.startswith("diag_ans_"))
+async def process_diagnostic_answer(callback: types.CallbackQuery, state: FSMContext):
+    chosen = int(callback.data.replace("diag_ans_", ""))
+    data = await state.get_data()
+    questions = data["diag_questions"]
+    idx = data["diag_index"]
+    score = data["diag_score"]
+    wrong = data["diag_wrong"]
+    q = questions[idx]
+ if chosen == q["correct"]:
+        score += 1
+        await callback.message.edit_text(f"✅ To'g'ri!\n\n{q['q']}")
+    else:
+        letters = ["A", "B", "C", "D"]
+        wrong.append(q)
+        await callback.message.edit_text(
+            f"❌ Xato.\n\n{q['q']}\n\n"
+            f"To'g'ri javob: {letters[q['correct']]}) {q['options'][q['correct']]}\n"
+            f"💡 {q['izoh']}"
+        )
+
+    idx += 1
+    await state.update_data(diag_index=idx, diag_score=score, diag_wrong=wrong)
+    await callback.answer()
+
+    if idx >= len(questions):
+        await finish_diagnostic(callback.message, state)
+    else:
+        await send_diagnostic_question(callback.message, state)
+
+async def finish_diagnostic(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    total = len(data["diag_questions"])
+    score = data["diag_score"]
+    percent = round(score / total * 100)
+
+    await message.answer(
+        f"🏁 Diagnostik test yakunlandi!\n\n"
+        f"✅ To'g'ri javoblar: {score}/{total}\n"
+        f"📊 Natija: {percent}%\n\n"
+        f"Bu sizning boshlang'ich darajangiz — darslar davomida uni yaxshilab boramiz!"
+    )
+    await state.clear()
 def get_main_menu():
     kb = ReplyKeyboardBuilder()
     kb.button(text="📝 Ro'yxatdan o'tish")
