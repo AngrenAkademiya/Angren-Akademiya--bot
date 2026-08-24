@@ -563,6 +563,7 @@ async def check_knowledge(message: types.Message, state: FSMContext):
     kb = InlineKeyboardBuilder()
     for subject in TEST_SUBJECTS:
         kb.button(text=subject, callback_data=f"test_subj_{subject}")
+    kb.button(text="Kimyo", callback_data="test_subj_Kimyo")
     kb.adjust(1)
     await message.answer("📚 Qaysi fandan test topshirmoqchisiz?", reply_markup=kb.as_markup())
     await state.set_state(TestQuiz.subject)
