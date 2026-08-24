@@ -489,7 +489,7 @@ async def process_diagnostic_answer(callback: types.CallbackQuery, state: FSMCon
     score = data["diag_score"]
     wrong = data["diag_wrong"]
     q = questions[idx]
-     if chosen == q["correct"]:
+    if chosen == q["correct"]:
         score += 1
         await callback.message.edit_text(f"✅ To'g'ri!\n\n{q['q']}")
     else:
