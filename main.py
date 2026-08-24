@@ -575,7 +575,8 @@ async def choose_grade(callback: types.CallbackQuery, state: FSMContext):
     await state.update_data(subject=subject, score=0, q_index=0)
 
     kb = InlineKeyboardBuilder()
-    for grade in range(1, 8):
+    grade_range = range(7, 12) if subject == "Kimyo" else range(1, 8)
+    for grade in grade_range:
         kb.button(text=f"{grade}-sinf", callback_data=f"test_grade_{grade}")
     kb.adjust(4, 3)
     await callback.message.edit_text("🎓 Sinfingizni tanlang:", reply_markup=kb.as_markup())
