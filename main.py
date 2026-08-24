@@ -523,6 +523,7 @@ async def finish_diagnostic(message: types.Message, state: FSMContext):
         f"Bu sizning boshlang'ich darajangiz — darslar davomida uni yaxshilab boramiz!"
     )
     await state.clear()
+    
 def get_main_menu():
     kb = ReplyKeyboardBuilder()
     kb.button(text="📝 Ro'yxatdan o'tish")
@@ -966,7 +967,11 @@ async def process_time_pref(message: types.Message, state: FSMContext):
         except Exception:
             logging.exception("Kanalga xabar yuborishda xato:")
 
-    await state.clear()
+await state.clear()
+    grade_raw = user_data.get("grade", "")
+    digits = "".join(ch for ch in grade_raw if ch.isdigit())
+    if digits and 7 <= int(digits) <= 11:
+        await start_diagnostic_test(message, state, int(digits))
 @dp.message(F.text == "👤 Shaxsiy kabinet")
 async def shaxsiy_kabinet(message: types.Message):
     await message.answer(
