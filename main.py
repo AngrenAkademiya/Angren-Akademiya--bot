@@ -967,7 +967,7 @@ async def process_time_pref(message: types.Message, state: FSMContext):
         except Exception:
             logging.exception("Kanalga xabar yuborishda xato:")
 
-await state.clear()
+    await state.clear()
     grade_raw = user_data.get("grade", "")
     digits = "".join(ch for ch in grade_raw if ch.isdigit())
     if digits and 7 <= int(digits) <= 11:
