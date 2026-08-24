@@ -589,7 +589,7 @@ async def start_questions(callback: types.CallbackQuery, state: FSMContext):
     grade = int(callback.data.replace("test_grade_", ""))
     data = await state.get_data()
     subject = data["subject"]
-        if subject == "Kimyo":
+    if subject == "Kimyo":
         questions = await asyncio.to_thread(get_diagnostic_questions, grade)
         if not questions:
             await callback.message.edit_text("⚠️ Bu sinf uchun Kimyo savollari hali tayyor emas.")
