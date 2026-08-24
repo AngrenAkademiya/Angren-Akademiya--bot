@@ -3,6 +3,7 @@ import logging
 from datetime import datetime
 import asyncio
 import json
+import random
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
