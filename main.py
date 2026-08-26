@@ -30,6 +30,23 @@ dp = Dispatcher(storage=MemoryStorage())
 
 EXCEL_FILE = "students.xlsx"
 
+CHANNEL_USERNAME = "@AngrenAkademiya"
+
+async def check_subscription(user_id: int) -> bool:
+    try:
+        member = await bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user_id)
+        return member.status not in ("left", "kicked")
+    except Exception:
+        logging.exception("Kanalga a'zolikni tekshirishda xato:")
+        return False
+
+def get_subscribe_keyboard():
+    kb = InlineKeyboardBuilder()
+    kb.button(text="📍 Kanalga o'tish", url="https://t.me/AngrenAkademiya")
+    kb.button(text="✅ A'zo bo'ldim, tekshirish", callback_data="check_sub")
+    kb.adjust(1)
+    return kb.as_markup()
+
 def generate_certificate(full_name: str, user_id: int) -> str:
     template = Image.open("certificate_template.png").convert("RGB")
     draw = ImageDraw.Draw(template)
@@ -50,8 +67,7 @@ def generate_certificate(full_name: str, user_id: int) -> str:
         fill=(180, 180, 180)
     )
 
-    qr_link = f"https://t.me/AngrenAkademiyaBot?start=cabinet_{user_id}"
-    qr_link = f"https://t.me/SIZNING_BOT_USERNAME?start=cabinet_{user_id}"
+    qr_link = f"https://t.me/AngrenAkademiya_bot?start=cabinet_{user_id}"
     qr_img = qrcode.make(qr_link).resize((110, 110))
     template.paste(qr_img, (template.width - 200, 330))
 
@@ -84,6 +100,20 @@ def find_full_name_by_id(user_id: int) -> str:
                 return row[2]
     except Exception:
         logging.exception("Ism qidirishda xato:")
+    return None
+
+
+def find_student_by_id(user_id: int):
+    try:
+        wb = openpyxl.load_workbook(EXCEL_FILE)
+        ws = wb.active
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if row[10] == user_id:
+                voucher = row[11] if len(row) > 11 and row[11] is not None else 30000
+                referrals = row[12] if len(row) > 12 and row[12] is not None else 0
+                return {"name": row[2], "voucher": voucher, "referrals": referrals}
+    except Exception:
+        logging.exception("O'quvchi ma'lumotini qidirishda xato:")
     return None
 
 
@@ -123,7 +153,7 @@ def save_to_excel(data, user_id):
         wb = Workbook()
         ws = wb.active
         ws.title = "O'quvchilar"
-        ws.append(["№", "Sana", "Ism Familiya", "Tel Raqam", "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar", "ID"])
+        ws.append(["№", "Sana", "Ism Familiya", "Tel Raqam", "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar", "ID", "Voucher", "Taklif qilganlar"])
         wb.save(EXCEL_FILE)
 
     wb = openpyxl.load_workbook(EXCEL_FILE)
@@ -146,11 +176,13 @@ def save_to_excel(data, user_id):
         data.get("filial"),
         data.get("time_pref"),
         courses_string,
-        user_id
+        user_id,
+        30000,
+        0
     ])
 
     try:
-        col_widths = {1: 5, 2: 16, 3: 22, 4: 14, 5: 14, 6: 10, 7: 6, 8: 12, 9: 12, 10: 15, 11: 15}
+        col_widths = {1: 5, 2: 16, 3: 22, 4: 14, 5: 14, 6: 10, 7: 6, 8: 12, 9: 12, 10: 15, 11: 15, 12: 12, 13: 16}
         for col_num, width in col_widths.items():
             col_letter = openpyxl.utils.get_column_letter(col_num)
             ws.column_dimensions[col_letter].width = width
@@ -219,10 +251,10 @@ def _write_to_google_sheets_sync(data, user_id):
     try:
         sheet = spreadsheet.worksheet(bugun)
     except Exception:
-        sheet = spreadsheet.add_worksheet(title=bugun, rows=1000, cols=11)
+        sheet = spreadsheet.add_worksheet(title=bugun, rows=1000, cols=13)
         sheet.append_row([
             "№", "Sana", "Ism Familiya", "Tel Raqam",
-            "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar", "ID"
+            "Ota-ona Tel", "Maktab", "Sinf", "Filial", "Smena", "Kurslar", "ID", "Voucher", "Taklif qilganlar"
         ])
 
     all_rows = sheet.get_all_values()
@@ -239,7 +271,9 @@ def _write_to_google_sheets_sync(data, user_id):
         data.get("filial"),
         data.get("time_pref"),
         courses_string,
-        user_id
+        user_id,
+        30000,
+        0
     ])
 
 
@@ -272,6 +306,8 @@ class Registration(StatesGroup):
 
 
 AVAILABLE_FILIALS = ["Angren", "Ohangaron"]
+
+ANGREN_SCHOOLS = [f"{i}-maktab" for i in range(1, 29)]
 AVAILABLE_TIMES = ["Ertalabki", "Kunduzgi", "Kechki"]
 AVAILABLE_SUBJECTS = [
     "Matematika - Milliy va xalqaro sertifikat",
@@ -458,8 +494,8 @@ async def start_diagnostic_test(message: types.Message, state: FSMContext, grade
     await state.update_data(diag_questions=questions, diag_index=0, diag_score=0, diag_wrong=[])
     await state.set_state(DiagnosticTest.question)
     await message.answer(
-        "📊 Endi Kimyo fanidan boshlang'ich diagnostik testni yechasiz — 15 ta savol.\n"
-        "Bu sizning bilim darajangizni aniqlash uchun kerak. Boshladik!"
+        f"🧪 {grade}-sinf Kimyo Diagnostik testi boshlanmoqda!\n\n"
+        "📊 Bu sizning boshlang'ich bilim darajangizni aniqlash uchun 15 ta savoldan iborat. Boshladik!"
     )
     await send_diagnostic_question(message, state)
 
@@ -493,13 +529,8 @@ async def process_diagnostic_answer(callback: types.CallbackQuery, state: FSMCon
         score += 1
         await callback.message.edit_text(f"✅ To'g'ri!\n\n{q['q']}")
     else:
-        letters = ["A", "B", "C", "D"]
         wrong.append(q)
-        await callback.message.edit_text(
-            f"❌ Xato.\n\n{q['q']}\n\n"
-            f"To'g'ri javob: {letters[q['correct']]}) {q['options'][q['correct']]}\n"
-            f"💡 {q['izoh']}"
-        )
+        await callback.message.edit_text(f"❌ Xato deb belgilandi.\n\n{q['q']}")
 
     idx += 1
     await state.update_data(diag_index=idx, diag_score=score, diag_wrong=wrong)
@@ -514,6 +545,7 @@ async def finish_diagnostic(message: types.Message, state: FSMContext):
     data = await state.get_data()
     total = len(data["diag_questions"])
     score = data["diag_score"]
+    wrong = data["diag_wrong"]
     percent = round(score / total * 100)
 
     await message.answer(
@@ -522,8 +554,49 @@ async def finish_diagnostic(message: types.Message, state: FSMContext):
         f"📊 Natija: {percent}%\n\n"
         f"Bu sizning boshlang'ich darajangiz — darslar davomida uni yaxshilab boramiz!"
     )
+
+    if wrong:
+        await state.update_data(diag_wrong=wrong)
+        kb = InlineKeyboardBuilder()
+        kb.button(text="🆘 Yordam kerak", callback_data="show_diag_wrong")
+        kb.button(text="💪 Mustaqil ishlayman", callback_data="hide_diag_wrong")
+        kb.adjust(2)
+        await message.answer(
+            f"📝 Xatolar ustida ishlash\n\n"
+            f"Siz {len(wrong)} ta savolda xato qildingiz.\n\n"
+            f"Avval o'zingiz shu mavzularni qayta ko'rib, xatoni topishga harakat qiling! "
+            f"Agar yordam kerak bo'lsa, pastdagi tugmani bosing.",
+            reply_markup=kb.as_markup()
+        )
+    else:
+        await state.clear()
+
+
+@dp.callback_query(F.data == "show_diag_wrong")
+async def show_diag_wrong(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    wrong = data.get("diag_wrong", [])
+    letters = ["A", "B", "C", "D"]
+    lines = []
+    for i, q in enumerate(wrong, 1):
+        lines.append(
+            f"{i}. {q['q']}\n"
+            f"✅ To'g'ri javob: {letters[q['correct']]}) {q['options'][q['correct']]}\n"
+            f"💡 {q['izoh']}"
+        )
+    text = "📖 Xato qilingan savollar va tushuntirishlar:\n\n" + "\n\n".join(lines)
+    await callback.message.edit_text(text)
+    await callback.answer()
     await state.clear()
-    
+
+
+@dp.callback_query(F.data == "hide_diag_wrong")
+async def hide_diag_wrong(callback: types.CallbackQuery, state: FSMContext):
+    await callback.message.edit_text("💪 Ajoyib! O'zingiz xatolaringiz ustida ishlang. Omad tilaymiz!")
+    await callback.answer()
+    await state.clear()
+
+
 def get_main_menu():
     kb = ReplyKeyboardBuilder()
     kb.button(text="📝 Ro'yxatdan o'tish")
@@ -537,6 +610,12 @@ def get_main_menu():
 @dp.message(F.text == "/start")
 async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
+    if not await check_subscription(message.from_user.id):
+        await message.answer(
+            "📍 Botdan foydalanish uchun avval bizning rasmiy kanalimizga a'zo bo'ling:",
+            reply_markup=get_subscribe_keyboard()
+        )
+        return
     await message.answer(
         "✨ Angren Akademiyasi rasmiy botiga xush kelibsiz!\n\n"
         "Kelajak akademiyasida o'z bilimingizni va farzandingiz kamolotini nazorat qiling.",
@@ -599,9 +678,11 @@ async def start_questions(callback: types.CallbackQuery, state: FSMContext):
     else:
         questions = TEST_SUBJECTS[subject][grade]
 
-    await state.update_data(grade=grade, questions=questions, q_index=0, score=0)
+    await state.update_data(grade=grade, questions=questions, q_index=0, score=0, wrong_questions=[])
     await state.set_state(TestQuiz.question)
     await callback.answer()
+    label = "Diagnostik testi" if subject == "Kimyo" else "testi"
+    await callback.message.answer(f"🧪 {grade}-sinf {subject} {label} boshlanmoqda! Omad tilaymiz 🍀")
     await send_question(callback.message, state)
 
 
@@ -618,7 +699,8 @@ async def send_question(message, state: FSMContext):
     kb = InlineKeyboardBuilder()
     for idx, option in enumerate(question["options"]):
         kb.button(text=option, callback_data=f"test_ans_{idx}")
-    kb.adjust(2)
+    max_len = max(len(opt) for opt in question["options"])
+    kb.adjust(1 if max_len > 20 else 2)
 
     await message.answer(
         f"❓ Savol {q_index + 1}/{len(questions)}:\n\n{question['q']}",
@@ -633,16 +715,27 @@ async def process_answer(callback: types.CallbackQuery, state: FSMContext):
     q_index = data["q_index"]
     questions = data["questions"]
     score = data["score"]
+    wrong_questions = data.get("wrong_questions", [])
 
-    correct = questions[q_index]["correct"]
+    question = questions[q_index]
+    correct = question["correct"]
     if chosen == correct:
         score += 1
-        await callback.answer("✅ To'g'ri!")
+        mark = "✅ To'g'ri!"
     else:
-        correct_text = questions[q_index]["options"][correct]
-        await callback.answer(f"❌ Xato! To'g'ri javob: {correct_text}", show_alert=True)
+        correct_text = question["options"][correct]
+        mark = f"❌ Xato! Siz tanladingiz: {question['options'][chosen]}\nTo'g'ri javob: {correct_text}"
+        wrong_questions.append(q_index)
 
-    await state.update_data(score=score, q_index=q_index + 1)
+    try:
+        await callback.message.edit_text(
+            f"❓ Savol {q_index + 1}/{len(questions)}:\n\n{question['q']}\n\n{mark}"
+        )
+    except Exception:
+        pass
+
+    await callback.answer()
+    await state.update_data(score=score, q_index=q_index + 1, wrong_questions=wrong_questions)
     await send_question(callback.message, state)
 
 
@@ -684,7 +777,45 @@ async def finish_test(message, state: FSMContext):
         except Exception:
             logging.exception("Diplom generatsiyasida xato:")
 
+    wrong_questions = data.get("wrong_questions", [])
+    if wrong_questions:
+        nums = ", ".join(str(i + 1) for i in wrong_questions)
+        kb = InlineKeyboardBuilder()
+        kb.button(text="🆘 Yordam kerak", callback_data="show_wrong_answers")
+        kb.button(text="💪 Mustaqil ishlayman", callback_data="hide_wrong_answers")
+        kb.adjust(2)
+        await message.answer(
+            f"📝 Xatolar ustida ishlash\n\n"
+            f"Siz {nums}-savollarda xato qildingiz.\n\n"
+            f"Avval o'zingiz shu savollarni qayta ko'rib, xatoni topishga harakat qiling! "
+            f"Agar yordam kerak bo'lsa, pastdagi tugmani bosing.",
+            reply_markup=kb.as_markup()
+        )
+    else:
+        await state.clear()
+
+@dp.callback_query(F.data == "show_wrong_answers")
+async def show_wrong_answers(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    questions = data.get("questions", [])
+    wrong_questions = data.get("wrong_questions", [])
+    lines = []
+    for i in wrong_questions:
+        q = questions[i]
+        correct_text = q["options"][q["correct"]]
+        lines.append(f"{i + 1}. {q['q']}\n✅ To'g'ri javob: {correct_text}")
+    text = "📖 Xato qilingan savollar va to'g'ri javoblar:\n\n" + "\n\n".join(lines)
+    await callback.message.edit_text(text)
+    await callback.answer()
     await state.clear()
+
+
+@dp.callback_query(F.data == "hide_wrong_answers")
+async def hide_wrong_answers(callback: types.CallbackQuery, state: FSMContext):
+    await callback.message.edit_text("💪 Ajoyib! O'zingiz xatolaringiz ustida ishlang. Omad tilaymiz!")
+    await callback.answer()
+    await state.clear()
+
 
 @dp.message(F.text == "🚪 Davomat (Keldim/Ketdim)")
 async def attendance_menu(message: types.Message):
@@ -747,6 +878,12 @@ async def method_payment(callback: types.CallbackQuery):
 
 @dp.message(F.text == "📝 Ro'yxatdan o'tish")
 async def start_registration(message: types.Message, state: FSMContext):
+    if not await check_subscription(message.from_user.id):
+        await message.answer(
+            "📍 Ro'yxatdan o'tish uchun avval kanalimizga a'zo bo'ling:",
+            reply_markup=get_subscribe_keyboard()
+        )
+        return
     await message.answer("Ism va familiyangizni kiriting:")
     await state.set_state(Registration.name)
 
@@ -768,15 +905,23 @@ async def process_phone(message: types.Message, state: FSMContext):
 @dp.message(Registration.parent_phone)
 async def process_parent_phone(message: types.Message, state: FSMContext):
     await state.update_data(parent_phone=message.text)
-    await message.answer("🏫 Nechanchi maktabda o'qiysiz?")
+    kb = InlineKeyboardBuilder()
+    for idx, school in enumerate(ANGREN_SCHOOLS):
+        kb.button(text=school, callback_data=f"school_{idx}")
+    kb.adjust(4)
+    await message.answer("🏫 Maktabingizni tanlang:", reply_markup=kb.as_markup())
     await state.set_state(Registration.school)
 
 
-@dp.message(Registration.school)
-async def process_school(message: types.Message, state: FSMContext):
-    await state.update_data(school=message.text)
-    await message.answer("🎓 Nechanchi sinfda o'qiysiz?")
+@dp.callback_query(Registration.school, F.data.startswith("school_"))
+async def process_school(callback: types.CallbackQuery, state: FSMContext):
+    idx = int(callback.data.replace("school_", ""))
+    school_name = ANGREN_SCHOOLS[idx]
+    await state.update_data(school=school_name)
+    await callback.message.edit_text(f"🏫 Tanlandi: {school_name}")
+    await callback.message.answer("🎓 Nechanchi sinfda o'qiysiz?")
     await state.set_state(Registration.grade)
+    await callback.answer()
 
 
 @dp.message(Registration.grade)
@@ -984,25 +1129,48 @@ async def process_time_pref(message: types.Message, state: FSMContext):
         await start_diagnostic_test(message, state, int(digits))
 @dp.message(F.text == "👤 Shaxsiy kabinet")
 async def shaxsiy_kabinet(message: types.Message):
+    student = await asyncio.to_thread(find_student_by_id, message.from_user.id)
+    if not student:
+        await message.answer("❌ Siz hali ro'yxatdan o'tmagansiz. Avval \"📝 Ro'yxatdan o'tish\" tugmasini bosing.")
+        return
     await message.answer(
         f"👤 Sizning shaxsiy kabinetingiz\n\n"
-        f"💳 Voucher balansiz: 30 000 so'm\n"
+        f"💳 Voucher balansiz: {student['voucher']:,} so'm\n"
         f"⚡️ Darslarni boshlashingiz bilan faollashadi!\n\n"
-        f"👥 Taklif qilgan do'stlar: 0 ta\n"
+        f"👥 Taklif qilgan do'stlar: {student['referrals']} ta\n"
         f"🎓 Sertifikat: berildi ✅\n\n"
         f"🚀 O'z karyerangiz tomon — biz bilan qadam bosing!"
     )
 @dp.callback_query(F.data == "profile")
 async def profile_handler(callback: types.CallbackQuery):
+    student = await asyncio.to_thread(find_student_by_id, callback.from_user.id)
+    if not student:
+        await callback.message.answer("❌ Siz hali ro'yxatdan o'tmagansiz. Avval \"📝 Ro'yxatdan o'tish\" tugmasini bosing.")
+        return
     await callback.message.answer(
     f"👤 Sizning shaxsiy kabinetingiz\n\n"
-    f"💳 Voucher balansiz: 30 000 so'm\n"
+    f"💳 Voucher balansiz: {student['voucher']:,} so'm\n"
     f"⚡️ Darslarni boshlashingiz bilan faollashadi!\n\n"
-    f"👥 Taklif qilgan do'stlar: 0 ta\n"
+    f"👥 Taklif qilgan do'stlar: {student['referrals']} ta\n"
     f"🎓 Sertifikat: berildi ✅\n\n"
     f"🚀 O'z karyerangiz tomon — biz bilan qadam bosing!"
 )
 
+
+
+@dp.callback_query(F.data == "check_sub")
+async def check_sub_callback(callback: types.CallbackQuery, state: FSMContext):
+    if await check_subscription(callback.from_user.id):
+        await callback.message.edit_text("✅ Rahmat! Endi botdan to'liq foydalanishingiz mumkin.")
+        await callback.message.answer(
+            "✨ Angren Akademiyasi rasmiy botiga xush kelibsiz!\n\n"
+            "Kelajak akademiyasida o'z bilimingizni va farzandingiz kamolotini nazorat qiling.",
+            reply_markup=get_main_menu()
+        )
+    else:
+        await callback.answer("❌ Siz hali kanalga a'zo bo'lmagansiz!", show_alert=True)
+        return
+    await callback.answer()
 
 
 @dp.callback_query(F.data == "cert")
