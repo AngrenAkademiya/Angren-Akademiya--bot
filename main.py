@@ -91,6 +91,19 @@ def get_diploma_tier(percent: int):
             return filename, title
     return None, None
 
+
+def get_student_level(percent: float) -> str:
+    if percent == 100:
+        return "🏆 Mutlaq a'lochi"
+    elif 86 <= percent <= 99:
+        return "🥇 A'lochi o'quvchi"
+    elif 70 <= percent <= 85:
+        return "🥈 Yaxshi bilimli"
+    elif 56 <= percent <= 69:
+        return "🥉 O'rtacha bilimli"
+    else:
+        return "⚠️ Past o'zlashtiruvchi"
+
 def find_full_name_by_id(user_id: int) -> str:
     try:
         wb = openpyxl.load_workbook(EXCEL_FILE)
@@ -111,7 +124,14 @@ def find_student_by_id(user_id: int):
             if row[10] == user_id:
                 voucher = row[11] if len(row) > 11 and row[11] is not None else 30000
                 referrals = row[12] if len(row) > 12 and row[12] is not None else 0
-                return {"name": row[2], "voucher": voucher, "referrals": referrals}
+                return {
+                    "name": row[2],
+                    "parent_phone": row[4],
+                    "school": row[5],
+                    "grade": row[6],
+                    "voucher": voucher,
+                    "referrals": referrals,
+                }
     except Exception:
         logging.exception("O'quvchi ma'lumotini qidirishda xato:")
     return None
@@ -294,6 +314,80 @@ async def save_to_google_sheets(data, user_id):
                 pass
 
 
+def _write_test_result_sync(user_id, subject, grade, percent):
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds_json = os.getenv("GOOGLE_CREDS")
+    if creds_json:
+        creds_data = json.loads(creds_json)
+        creds = Credentials.from_service_account_info(creds_data, scopes=scopes)
+    else:
+        creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
+    client = gspread.authorize(creds)
+
+    sheet_url = os.getenv("GOOGLE_SHEET_URL")
+    spreadsheet_id = os.getenv("SPREADSHEET_ID")
+    if sheet_url:
+        spreadsheet = client.open_by_url(sheet_url)
+    elif spreadsheet_id:
+        spreadsheet = client.open_by_key(spreadsheet_id)
+    else:
+        spreadsheet = client.open_by_url(
+            "https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYlUn0/edit"
+        )
+
+    try:
+        sheet = spreadsheet.worksheet("Test Natijalari")
+    except Exception:
+        sheet = spreadsheet.add_worksheet(title="Test Natijalari", rows=2000, cols=8)
+        sheet.append_row(["Sana", "O'quvchi", "Maktab", "Sinf", "Fan", "Natija (%)", "Daraja", "ID"])
+
+    student = find_student_by_id(user_id) or {}
+    name = student.get("name") or "Noma'lum"
+    school = student.get("school") or "—"
+    sana = datetime.now().strftime("%d.%m.%Y %H:%M")
+    daraja = get_student_level(percent)
+
+    sheet.append_row([sana, name, school, grade, subject, percent, daraja, user_id])
+
+
+async def save_test_result(user_id, subject, grade, percent):
+    try:
+        await asyncio.to_thread(_write_test_result_sync, user_id, subject, grade, percent)
+        logging.info("Test natijasi 'Test Natijalari' jadvaliga yozildi!")
+    except Exception:
+        logging.exception("Test natijasini yozishda xato:")
+
+
+async def notify_admin_test_result(user_id, subject, grade, score, total, percent):
+    admin_id = os.getenv("ADMIN_ID")
+    if not admin_id:
+        return
+    try:
+        student = await asyncio.to_thread(find_student_by_id, user_id) or {}
+        name = student.get("name") or "Noma'lum"
+        school = student.get("school") or "—"
+        parent_phone = student.get("parent_phone") or "—"
+        daraja = get_student_level(percent)
+        sana = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+        text = (
+            f"📊 TEST NATIJASI HISOBOTI\n\n"
+            f"👤 O'quvchi: {name}\n"
+            f"🏫 Maktab/Sinf: {school} | {grade}-sinf\n"
+            f"📚 Fan: {subject}\n"
+            f"🎯 Natija: {score}/{total} ball ({percent}%)\n"
+            f"🎖 Daraja: {daraja}\n"
+            f"📞 Ota-ona tel: {parent_phone}\n"
+            f"⏰ Vaqt: {sana}"
+        )
+        await bot.send_message(int(admin_id), text)
+    except Exception:
+        logging.exception("Admin xabarnomasini yuborishda xato:")
+
+
 class Registration(StatesGroup):
     name = State()
     phone = State()
@@ -309,22 +403,43 @@ AVAILABLE_FILIALS = ["Angren", "Ohangaron"]
 
 ANGREN_SCHOOLS = [f"{i}-maktab" for i in range(1, 29)]
 AVAILABLE_TIMES = ["Ertalabki", "Kunduzgi", "Kechki"]
-AVAILABLE_SUBJECTS = [
-    "Matematika - Milliy va xalqaro sertifikat",
-    "Matematika - majburiy blok uchun",
-    "Ingliz tili - IELTS",
-    "Tibbiyot - shifokorlik kasblari uchun\nKimyo - Milliy va xalqaro sertifikat",
-    "Prezident maktablariga tayyorlov",
-    "Al-Xorazmiy maktablariga tayyorlov",
-    "Tibbiyot - shifokorlik kasbini tanlaganlar uchun\nBiologiya - Milliy va xalqaro sertifikat",
-    "Tarix - Milliy sertifikat",
-    "Tarix - Majburiy blok uchun",
-    "Huquq - Milliy sertifikat",
-    "IT - Milliy va xalqaro sertifikat",
-    "Ona tili va adabiyoti - Milliy sertifikat",
-    "Ona tili va adabiyoti - Majburiy blok uchun",
-    "Maktabga tayyorlov. Pochemuchka"
-]
+
+COURSE_CATEGORIES = {
+    "🩺 Shifokorlik yo'nalishi (5 ta fan bir joyda)": [
+        "1️⃣ Kimyo - Milliy va xalqaro sertifikat",
+        "2️⃣ Biologiya - Milliy va xalqaro sertifikat",
+        "3️⃣ Majburiy fanlar (Matematika, Tarix, Ona tili) - sertifikatlar"
+    ],
+    "📚 Majburiy blok (Hamma uchun)": [
+        "📌 Majburiy fanlar (Matematika, Tarix, Ona tili) - sertifikatlar"
+    ],
+    "⚡ Qisqa muddatli tayyorlov kurslari": [
+        "🚀 Tezlashtirilgan (Intensiv) tayyorlov",
+        "📝 Imtihon oldi takrorlash kursi"
+    ],
+    "🌱 Past o'zlashtiruvchilar bilan ishlash": [
+        "🎯 Maxsus yakka tartibdagi (individual) dastur"
+    ],
+    "📐 Aniq fanlar & IT": [
+        "🧮 Matematika - Milliy va xalqaro sertifikat",
+        "📐 Fizika - Milliy va xalqaro sertifikat",
+        "💻 IT - Milliy va xalqaro sertifikat"
+    ],
+    "🌍 Tillar va Gumanitar": [
+        "🇬🇧 Ingliz tili - IELTS / CEFR",
+        "🇷🇺 Rus tili - Milliy va xalqaro sertifikat",
+        "📖 Ona tili va adabiyot - Milliy sertifikat",
+        "📜 Tarix - Milliy sertifikat",
+        "⚖️ Huquq - Milliy sertifikat"
+    ],
+    "🏫 Prezident maktabi va maxsus maktablarga tayyorlov": [
+        "⭐ Prezident maktablariga tayyorlov",
+        "📐 Al-Xorazmiy maktabiga tayyorlov",
+        "🧸 Maktabga tayyorlov (Pochemuchka)"
+    ]
+}
+COURSE_CATEGORY_LIST = list(COURSE_CATEGORIES.items())
+
 class TestQuiz(StatesGroup):
     subject = State()
     grade = State()
@@ -423,6 +538,9 @@ TEST_SUBJECTS = {
 class DiagnosticTest(StatesGroup):
     question = State()
 
+class RetryQuiz(StatesGroup):
+    question = State()
+
 QIYINLIK_HARFLAR = {"A": 0, "B": 1, "C": 2, "D": 3}
 DIAGNOSTIC_CACHE = {}
 
@@ -491,7 +609,7 @@ async def start_diagnostic_test(message: types.Message, state: FSMContext, grade
         await message.answer("⚠️ Bu sinf uchun diagnostik savollar hali tayyor emas.")
         return
 
-    await state.update_data(diag_questions=questions, diag_index=0, diag_score=0, diag_wrong=[])
+    await state.update_data(diag_questions=questions, diag_index=0, diag_score=0, diag_wrong=[], grade=grade)
     await state.set_state(DiagnosticTest.question)
     await message.answer(
         f"🧪 {grade}-sinf Kimyo Diagnostik testi boshlanmoqda!\n\n"
@@ -546,12 +664,18 @@ async def finish_diagnostic(message: types.Message, state: FSMContext):
     total = len(data["diag_questions"])
     score = data["diag_score"]
     wrong = data["diag_wrong"]
+    grade = data.get("grade", "—")
     percent = round(score / total * 100)
+
+    await save_test_result(message.chat.id, "Kimyo (Diagnostik)", grade, percent)
+    await notify_admin_test_result(message.chat.id, "Kimyo (Diagnostik)", grade, score, total, percent)
+    daraja = get_student_level(percent)
 
     await message.answer(
         f"🏁 Diagnostik test yakunlandi!\n\n"
         f"✅ To'g'ri javoblar: {score}/{total}\n"
-        f"📊 Natija: {percent}%\n\n"
+        f"📊 Natija: {percent}%\n"
+        f"🎖 Daraja: {daraja}\n\n"
         f"Bu sizning boshlang'ich darajangiz — darslar davomida uni yaxshilab boramiz!"
     )
 
@@ -590,20 +714,313 @@ async def show_diag_wrong(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
 
 
+MAX_RETRY_ATTEMPTS = 20
+
+
+async def start_retry_loop(message, state: FSMContext, wrong_question_dicts: list):
+    retry_queue = [{"q": q, "attempts": 0} for q in wrong_question_dicts]
+    await state.update_data(retry_queue=retry_queue)
+    await state.set_state(RetryQuiz.question)
+    await message.answer(
+        f"💪 Mustaqil mashq boshlandi!\n\n"
+        f"Siz xato qilgan {len(retry_queue)} ta savolni ketma-ket qayta yechasiz. "
+        f"Har bir savolni to'g'ri javoblaguningizcha shu savol qaytaveradi!"
+    )
+    await send_retry_question(message, state)
+
+
+async def send_retry_question(message, state: FSMContext):
+    data = await state.get_data()
+    retry_queue = data.get("retry_queue", [])
+    if not retry_queue:
+        await message.answer(
+            "🎉 Ajoyib! Siz xatolaringiz ustida ishlab, barcha savollarni to'g'ri javobladingiz!",
+            reply_markup=get_main_menu()
+        )
+        await state.clear()
+        return
+
+    item = retry_queue[0]
+    q = item["q"]
+    kb = InlineKeyboardBuilder()
+    for idx, option in enumerate(q["options"]):
+        kb.button(text=option, callback_data=f"retry_ans_{idx}")
+    max_len = max(len(opt) for opt in q["options"])
+    kb.adjust(1 if max_len > 20 else 2)
+
+    await message.answer(
+        f"🔁 Qolgan: {len(retry_queue)} ta savol\n\n{q['q']}",
+        reply_markup=kb.as_markup()
+    )
+
+
+@dp.callback_query(RetryQuiz.question, F.data.startswith("retry_ans_"))
+async def process_retry_answer(callback: types.CallbackQuery, state: FSMContext):
+    chosen = int(callback.data.replace("retry_ans_", ""))
+    data = await state.get_data()
+    retry_queue = data.get("retry_queue", [])
+    item = retry_queue[0]
+    q = item["q"]
+    correct = q["correct"]
+
+    if chosen == correct:
+        await callback.message.edit_text(f"✅ To'g'ri!\n\n{q['q']}")
+        retry_queue.pop(0)
+    else:
+        item["attempts"] += 1
+        if item["attempts"] >= MAX_RETRY_ATTEMPTS:
+            correct_text = q["options"][correct]
+            izoh = q.get("izoh")
+            extra = f"\n💡 {izoh}" if izoh else ""
+            await callback.message.edit_text(
+                f"❌ Xato.\n\n{q['q']}\n\n"
+                f"{MAX_RETRY_ATTEMPTS} marta urinishdan so'ng — to'g'ri javob: {correct_text}{extra}\n\n"
+                f"Bu mavzuni alohida qayta ko'rib chiqishingizni tavsiya qilamiz."
+            )
+            retry_queue.pop(0)
+        else:
+            await callback.message.edit_text(
+                f"❌ Xato! Qayta urinib ko'ring.\n\n{q['q']}\n"
+                f"(Urinish: {item['attempts']}/{MAX_RETRY_ATTEMPTS})"
+            )
+
+    await callback.answer()
+    await state.update_data(retry_queue=retry_queue)
+    await send_retry_question(callback.message, state)
+
+
 @dp.callback_query(F.data == "hide_diag_wrong")
 async def hide_diag_wrong(callback: types.CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("💪 Ajoyib! O'zingiz xatolaringiz ustida ishlang. Omad tilaymiz!")
+    data = await state.get_data()
+    wrong_dicts = data.get("diag_wrong", [])
     await callback.answer()
-    await state.clear()
+    await start_retry_loop(callback.message, state, wrong_dicts)
 
 
-def get_main_menu():
+def _get_role_sync(user_id: int):
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds_json = os.getenv("GOOGLE_CREDS")
+    if creds_json:
+        creds_data = json.loads(creds_json)
+        creds = Credentials.from_service_account_info(creds_data, scopes=scopes)
+    else:
+        creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
+    client = gspread.authorize(creds)
+
+    sheet_url = os.getenv("GOOGLE_SHEET_URL")
+    spreadsheet_id = os.getenv("SPREADSHEET_ID")
+    if sheet_url:
+        spreadsheet = client.open_by_url(sheet_url)
+    elif spreadsheet_id:
+        spreadsheet = client.open_by_key(spreadsheet_id)
+    else:
+        spreadsheet = client.open_by_url(
+            "https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYlUn0/edit"
+        )
+
+    try:
+        sheet = spreadsheet.worksheet("Rollar")
+    except Exception:
+        sheet = spreadsheet.add_worksheet(title="Rollar", rows=200, cols=6)
+        sheet.append_row(["Telegram ID", "Rol", "Maktab", "Sinf", "Metod Birlashma", "Fan"])
+        return None
+
+    for row in sheet.get_all_records():
+        try:
+            if int(row.get("Telegram ID")) == user_id:
+                sinf = str(row.get("Sinf", "")).strip()
+                metod_birlashma = str(row.get("Metod Birlashma", "")).strip()
+                fan = str(row.get("Fan", "")).strip()
+                return {
+                    "role": str(row.get("Rol", "")).strip().lower(),
+                    "maktab": str(row.get("Maktab", "")).strip(),
+                    "sinf": sinf if sinf else None,
+                    "metod_birlashma": metod_birlashma if metod_birlashma else None,
+                    "fan": fan if fan else None
+                }
+        except (ValueError, TypeError):
+            continue
+    return None
+
+
+async def get_user_role(user_id: int):
+    try:
+        return await asyncio.to_thread(_get_role_sync, user_id)
+    except Exception:
+        logging.exception("Rolni tekshirishda xato:")
+        return None
+
+
+ROLE_LABELS = {
+    "direktor": "🏫 Direktor paneli",
+    "oibdo": "📘 O'IBDO' paneli (o'quv ishlari)",
+    "otibdo": "📗 O'TIBDO' paneli (o'quv-tarbiyaviy ishlar)",
+    "texnik": "🔧 Texnik xodimlar bo'limi paneli",
+    "boshlangich_oqituvchi": "🧒 Boshlang'ich sinf o'qituvchisi paneli",
+    "yuqori_sinf_oqituvchi": "🎓 Yuqori sinf o'qituvchisi paneli",
+    "birlashma_rahbari": "🧩 Metod birlashma rahbari paneli",
+}
+
+# Bu rollar butun maktab statistikasini ko'radi
+SCHOOL_WIDE_ROLES = {"direktor", "oibdo", "otibdo", "texnik"}
+# Bu rol faqat o'z sinfi statistikasini ko'radi (bitta sinfga hamma fanni o'qitadi)
+CLASS_SCOPED_ROLES = {"boshlangich_oqituvchi"}
+# Bu rol faqat o'zi o'qitadigan FAN bo'yicha, butun maktab kesimida ko'radi
+SUBJECT_SCOPED_ROLES = {"yuqori_sinf_oqituvchi"}
+# Bu rol o'z metod birlashmasiga tegishli barcha fanlar bo'yicha ko'radi
+BIRLASHMA_LEADER_ROLES = {"birlashma_rahbari"}
+
+BOSHLANGICH_TALIM_NOMLARI = {"boshlang'ich ta'lim", "boshlangich talim", "boshlang'ich talim"}
+
+
+def _get_birlashma_fanlar_sync(maktab: str, metod_birlashma: str):
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds_json = os.getenv("GOOGLE_CREDS")
+    if creds_json:
+        creds_data = json.loads(creds_json)
+        creds = Credentials.from_service_account_info(creds_data, scopes=scopes)
+    else:
+        creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
+    client = gspread.authorize(creds)
+
+    sheet_url = os.getenv("GOOGLE_SHEET_URL")
+    spreadsheet_id = os.getenv("SPREADSHEET_ID")
+    if sheet_url:
+        spreadsheet = client.open_by_url(sheet_url)
+    elif spreadsheet_id:
+        spreadsheet = client.open_by_key(spreadsheet_id)
+    else:
+        spreadsheet = client.open_by_url(
+            "https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYlUn0/edit"
+        )
+
+    try:
+        sheet = spreadsheet.worksheet("Rollar")
+    except Exception:
+        return []
+
+    birlashma_lower = metod_birlashma.strip().lower()
+    fanlar = set()
+    for row in sheet.get_all_records():
+        row_maktab = str(row.get("Maktab", "")).strip()
+        row_birlashma = str(row.get("Metod Birlashma", "")).strip().lower()
+        row_fan = str(row.get("Fan", "")).strip()
+        if row_maktab == maktab and row_birlashma == birlashma_lower and row_fan:
+            fanlar.add(row_fan)
+    return list(fanlar)
+
+
+async def get_birlashma_fanlar(maktab: str, metod_birlashma: str):
+    try:
+        return await asyncio.to_thread(_get_birlashma_fanlar_sync, maktab, metod_birlashma)
+    except Exception:
+        logging.exception("Birlashma fanlarini olishda xato:")
+        return []
+
+
+def _get_scope_stats_sync(maktab: str, sinf: str = None, fan=None, grade_range=None):
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds_json = os.getenv("GOOGLE_CREDS")
+    if creds_json:
+        creds_data = json.loads(creds_json)
+        creds = Credentials.from_service_account_info(creds_data, scopes=scopes)
+    else:
+        creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
+    client = gspread.authorize(creds)
+
+    sheet_url = os.getenv("GOOGLE_SHEET_URL")
+    spreadsheet_id = os.getenv("SPREADSHEET_ID")
+    if sheet_url:
+        spreadsheet = client.open_by_url(sheet_url)
+    elif spreadsheet_id:
+        spreadsheet = client.open_by_key(spreadsheet_id)
+    else:
+        spreadsheet = client.open_by_url(
+            "https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYlUn0/edit"
+        )
+
+    try:
+        sheet = spreadsheet.worksheet("Test Natijalari")
+    except Exception:
+        return None
+
+    rows = [r for r in sheet.get_all_records() if str(r.get("Maktab", "")).strip() == maktab]
+
+    if sinf:
+        rows = [r for r in rows if str(r.get("Sinf", "")).strip() == str(sinf).strip()]
+
+    if fan:
+        fan_list = [fan] if isinstance(fan, str) else list(fan)
+        fan_list_lower = [f.strip().lower() for f in fan_list if f]
+        rows = [
+            r for r in rows
+            if any(fl in str(r.get("Fan", "")).strip().lower() for fl in fan_list_lower)
+        ]
+
+    if grade_range:
+        min_g, max_g = grade_range
+        filtered = []
+        for r in rows:
+            try:
+                g = int(str(r.get("Sinf", "")).strip())
+                if min_g <= g <= max_g:
+                    filtered.append(r)
+            except (ValueError, TypeError):
+                continue
+        rows = filtered
+
+    if not rows:
+        return {"jami": 0}
+
+    counts = {"🏆 Mutlaq a'lochi": 0, "🥇 A'lochi o'quvchi": 0, "🥈 Yaxshi bilimli": 0,
+              "🥉 O'rtacha bilimli": 0, "⚠️ Past o'zlashtiruvchi": 0}
+    total_percent = 0
+    for r in rows:
+        daraja = str(r.get("Daraja", "")).strip()
+        if daraja in counts:
+            counts[daraja] += 1
+        try:
+            total_percent += float(r.get("Natija (%)", 0))
+        except (ValueError, TypeError):
+            pass
+
+    return {
+        "jami": len(rows),
+        "mutlaq_alochi": counts["🏆 Mutlaq a'lochi"],
+        "alochi": counts["🥇 A'lochi o'quvchi"],
+        "yaxshi": counts["🥈 Yaxshi bilimli"],
+        "ortacha": counts["🥉 O'rtacha bilimli"],
+        "past": counts["⚠️ Past o'zlashtiruvchi"],
+        "ortacha_foiz": round(total_percent / len(rows), 1)
+    }
+
+
+async def get_scope_stats(maktab: str, sinf: str = None, fan=None, grade_range=None):
+    try:
+        return await asyncio.to_thread(_get_scope_stats_sync, maktab, sinf, fan, grade_range)
+    except Exception:
+        logging.exception("Statistikani olishda xato:")
+        return None
+
+
+def get_main_menu(has_panel: bool = False):
     kb = ReplyKeyboardBuilder()
     kb.button(text="📝 Ro'yxatdan o'tish")
     kb.button(text="📈 Bilim darajasini tekshirish")
     kb.button(text="🚪 Davomat (Keldim/Ketdim)")
     kb.adjust(1, 2)
     kb.button(text="👤 Shaxsiy kabinet")
+    if has_panel:
+        kb.button(text="🏫 Maktab paneli")
     return kb.as_markup(resize_keyboard=True)
 
 
@@ -616,10 +1033,94 @@ async def cmd_start(message: types.Message, state: FSMContext):
             reply_markup=get_subscribe_keyboard()
         )
         return
+    role_info = await get_user_role(message.from_user.id)
+    has_panel = bool(role_info and role_info.get("role") in ROLE_LABELS)
     await message.answer(
         "✨ Angren Akademiyasi rasmiy botiga xush kelibsiz!\n\n"
         "Kelajak akademiyasida o'z bilimingizni va farzandingiz kamolotini nazorat qiling.",
-        reply_markup=get_main_menu()
+        reply_markup=get_main_menu(has_panel)
+    )
+
+
+@dp.message(F.text == "🏫 Maktab paneli")
+async def school_panel(message: types.Message):
+    role_info = await get_user_role(message.from_user.id)
+    role = role_info.get("role") if role_info else None
+    if not role_info or role not in ROLE_LABELS:
+        await message.answer("❌ Sizda bu bo'limga kirish huquqi yo'q.")
+        return
+
+    maktab = role_info["maktab"]
+    sinf = role_info.get("sinf")
+    fan = role_info.get("fan")
+    metod_birlashma = role_info.get("metod_birlashma")
+
+    filter_sinf = None
+    filter_fan = None
+    filter_grade_range = None
+    birlashma_fanlar = []
+
+    if role in CLASS_SCOPED_ROLES:
+        if not sinf:
+            await message.answer("⚠️ Sizning \"Sinf\" ma'lumotingiz Rollar jadvalida kiritilmagan. Admin bilan bog'laning.")
+            return
+        filter_sinf = sinf
+    elif role in SUBJECT_SCOPED_ROLES:
+        if not fan:
+            await message.answer("⚠️ Sizning \"Fan\" ma'lumotingiz Rollar jadvalida kiritilmagan. Admin bilan bog'laning.")
+            return
+        filter_fan = fan
+    elif role in BIRLASHMA_LEADER_ROLES:
+        if not metod_birlashma:
+            await message.answer("⚠️ Sizning \"Metod Birlashma\" ma'lumotingiz Rollar jadvalida kiritilmagan. Admin bilan bog'laning.")
+            return
+        if metod_birlashma.strip().lower() in BOSHLANGICH_TALIM_NOMLARI:
+            filter_grade_range = (1, 4)
+        else:
+            birlashma_fanlar = await get_birlashma_fanlar(maktab, metod_birlashma)
+            filter_fan = birlashma_fanlar if birlashma_fanlar else None
+
+    stats = await get_scope_stats(maktab, sinf=filter_sinf, fan=filter_fan, grade_range=filter_grade_range)
+
+    if not stats:
+        await message.answer("⚠️ Statistikani yuklab bo'lmadi, keyinroq urinib ko'ring.")
+        return
+
+    header_lines = [ROLE_LABELS[role], "", f"🏫 {maktab}"]
+    if role in SUBJECT_SCOPED_ROLES:
+        header_lines.append(f"📚 Fan: {fan}")
+        if metod_birlashma:
+            header_lines.append(f"🧬 Metod birlashma: {metod_birlashma}")
+        if sinf:
+            header_lines.append(f"👨‍👩‍👧 Sinf rahbarligi: {sinf}-sinf")
+    elif role in CLASS_SCOPED_ROLES:
+        header_lines.append(f"🏷 Sinf: {sinf}-sinf")
+        if metod_birlashma:
+            header_lines.append(f"🧬 Metod birlashma: {metod_birlashma}")
+    elif role in BIRLASHMA_LEADER_ROLES:
+        header_lines.append(f"🧩 Metod birlashma: {metod_birlashma}")
+        if filter_grade_range:
+            header_lines.append("🏷 Qamrov: 1–4-sinflar")
+        elif birlashma_fanlar:
+            header_lines.append(f"📚 Fanlar: {', '.join(birlashma_fanlar)}")
+        else:
+            header_lines.append("📚 Fanlar: hali biriktirilmagan")
+
+    header_text = "\n".join(header_lines)
+
+    if stats["jami"] == 0:
+        await message.answer(f"{header_text}\n\nHozircha test natijalari mavjud emas.")
+        return
+
+    await message.answer(
+        f"{header_text}\n\n"
+        f"📊 Jami test natijalari: {stats['jami']} ta\n\n"
+        f"🏆 Mutlaq a'lochi: {stats['mutlaq_alochi']}\n"
+        f"🥇 A'lochi o'quvchi: {stats['alochi']}\n"
+        f"🥈 Yaxshi bilimli: {stats['yaxshi']}\n"
+        f"🥉 O'rtacha bilimli: {stats['ortacha']}\n"
+        f"⚠️ Past o'zlashtiruvchi: {stats['past']}\n\n"
+        f"📈 O'rtacha ko'rsatkich: {stats['ortacha_foiz']}%"
     )
 
 
@@ -748,11 +1249,16 @@ async def finish_test(message, state: FSMContext):
     total = len(questions)
     percent = int((score / total) * 100)
 
+    await save_test_result(message.chat.id, subject, grade, percent)
+    await notify_admin_test_result(message.chat.id, subject, grade, score, total, percent)
+
     filename, title = get_diploma_tier(percent)
+    daraja = get_student_level(percent)
 
     result_text = (
         f"🎉 Test yakunlandi!\n\n"
         f"📊 Natija: {score}/{total} ({percent}%)\n"
+        f"🎖 Daraja: {daraja}\n"
     )
 
     if title:
@@ -812,9 +1318,12 @@ async def show_wrong_answers(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data == "hide_wrong_answers")
 async def hide_wrong_answers(callback: types.CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("💪 Ajoyib! O'zingiz xatolaringiz ustida ishlang. Omad tilaymiz!")
+    data = await state.get_data()
+    questions = data.get("questions", [])
+    wrong_questions = data.get("wrong_questions", [])
+    wrong_dicts = [questions[i] for i in wrong_questions]
     await callback.answer()
-    await state.clear()
+    await start_retry_loop(callback.message, state, wrong_dicts)
 
 
 @dp.message(F.text == "🚪 Davomat (Keldim/Ketdim)")
@@ -941,45 +1450,78 @@ async def process_filial(message: types.Message, state: FSMContext):
         await message.answer("Tugmalardan birini bosing!")
         return
     await state.update_data(filial=message.text, selected_courses=[])
-    await show_subjects_keyboard(message, [])
-
-    continue_kb = InlineKeyboardBuilder()
-    continue_kb.button(text="✅ Tanlashni tugatdim, davom etish ➡️", callback_data="sub_done")
-    await message.answer(
-        "👆 Kerakli kurslarni yuqoridan belgilang.\n\n"
-        "👇 Barchasini tanlab bo'lgach, shu tugmani bosing:",
-        reply_markup=continue_kb.as_markup()
-    )
-
     await state.set_state(Registration.subjects)
+    await send_category_keyboard(message, state)
 
 
-async def show_subjects_keyboard(message, selected_courses):
+async def send_category_keyboard(target, state: FSMContext, edit: bool = False):
+    data = await state.get_data()
+    selected = data.get("selected_courses", [])
     kb = InlineKeyboardBuilder()
-    for idx, subject in enumerate(AVAILABLE_SUBJECTS):
-        status = "✅" if subject in selected_courses else ""
-        kb.button(text=f"{subject} {status}", callback_data=f"sub_{idx}")
+    for idx, (cat_name, subjects) in enumerate(COURSE_CATEGORY_LIST):
+        count = sum(1 for s in subjects if s in selected)
+        label = f"{cat_name}" + (f" ✅×{count}" if count else "")
+        kb.button(text=label, callback_data=f"cat_{idx}")
+    kb.button(text=f"➡️ Davom etish ({len(selected)} ta tanlangan)", callback_data="cat_done")
     kb.adjust(1)
 
-    text = "📚 Kurslarni tanlang:\n\n"
-    if selected_courses:
-        text += "Tanlanganlar:\n" + "\n".join(
-            f"- {c.replace(chr(10), ' ')}" for c in selected_courses
-        )
-
-    if isinstance(message, types.Message):
-        await message.answer(text, reply_markup=kb.as_markup())
+    text = "📚 Kurs yo'nalishini tanlang:"
+    if edit:
+        await target.edit_text(text, reply_markup=kb.as_markup())
     else:
-        await message.message.edit_text(text, reply_markup=kb.as_markup())
+        await target.answer(text, reply_markup=kb.as_markup())
 
 
-@dp.callback_query(Registration.subjects, F.data.startswith("sub_"))
-async def process_subjects(callback: types.CallbackQuery, state: FSMContext):
+async def send_subject_list(message, state: FSMContext, cat_idx: int):
     data = await state.get_data()
-    selected_courses = data.get("selected_courses", [])
-    action = callback.data.split("_")[1]
+    selected = data.get("selected_courses", [])
+    cat_name, subjects = COURSE_CATEGORY_LIST[cat_idx]
+    kb = InlineKeyboardBuilder()
+    for i, subj in enumerate(subjects):
+        mark = "✅ " if subj in selected else ""
+        kb.button(text=f"{mark}{subj}", callback_data=f"csub_{cat_idx}_{i}")
+    kb.button(text="⬅️ Kategoriyalarga qaytish", callback_data="cat_back")
+    kb.adjust(1)
+
+    if "Past o'zlashtiruvchi" in cat_name:
+        header_text = (
+            "🌱 <b>Past o'zlashtiruvchi o'quvchilar bilan ishlash bo'limi</b>\n\n"
+            "💬 <i>Farzandingiz fanlarni o'zlashtirishda orqada qolyaptimi? Bizda yechim bor!</i>\n"
+            "Har bir o'quvchi bilan alohida (individual) ishlab, uni iqtidorli darajagacha yetkazib beramiz!\n\n"
+            "👇 <b>Dasturni tanlash uchun pastdagi tugmani bosing:</b>"
+        )
+    else:
+        header_text = f"📌 <b>{cat_name}</b> yo'nalishidagi kurslarni tanlang:"
+
+    await message.edit_text(header_text, reply_markup=kb.as_markup(), parse_mode="HTML")
+
+
+@dp.callback_query(Registration.subjects, F.data.startswith("csub_"))
+async def process_course_subject(callback: types.CallbackQuery, state: FSMContext):
+    _, cat_idx_str, item_idx_str = callback.data.split("_")
+    cat_idx = int(cat_idx_str)
+    item_idx = int(item_idx_str)
+    cat_name, subjects = COURSE_CATEGORY_LIST[cat_idx]
+    subj = subjects[item_idx]
+
+    data = await state.get_data()
+    selected = data.get("selected_courses", [])
+    if subj in selected:
+        selected.remove(subj)
+    else:
+        selected.append(subj)
+    await state.update_data(selected_courses=selected)
+    await callback.answer()
+    await send_subject_list(callback.message, state, cat_idx)
+
+
+@dp.callback_query(Registration.subjects, F.data.startswith("cat_"))
+async def process_category_nav(callback: types.CallbackQuery, state: FSMContext):
+    action = callback.data.replace("cat_", "", 1)
 
     if action == "done":
+        data = await state.get_data()
+        selected_courses = data.get("selected_courses", [])
         if not selected_courses:
             await callback.answer("Kamida bitta fan tanlang!", show_alert=True)
             return
@@ -994,17 +1536,14 @@ async def process_subjects(callback: types.CallbackQuery, state: FSMContext):
         await callback.answer()
         return
 
-    subject_idx = int(action)
-    subject_name = AVAILABLE_SUBJECTS[subject_idx]
+    if action == "back":
+        await callback.answer()
+        await send_category_keyboard(callback.message, state, edit=True)
+        return
 
-    if subject_name in selected_courses:
-        selected_courses.remove(subject_name)
-    else:
-        selected_courses.append(subject_name)
-
-    await state.update_data(selected_courses=selected_courses)
-    await show_subjects_keyboard(callback, selected_courses)
+    cat_idx = int(action)
     await callback.answer()
+    await send_subject_list(callback.message, state, cat_idx)
 
 
 def escape_markdown(text):
