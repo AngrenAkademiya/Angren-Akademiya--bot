@@ -1,4 +1,4 @@
-import os  
+aimport os  
 import logging
 from datetime import datetime
 import asyncio
@@ -797,6 +797,44 @@ async def hide_diag_wrong(callback: types.CallbackQuery, state: FSMContext):
     await start_retry_loop(callback.message, state, wrong_dicts)
 
 
+FAN_TO_BIRLASHMA = {
+    "kimyo": "Tabiiy fanlar",
+    "biologiya": "Tabiiy fanlar",
+    "fizika": "Tabiiy fanlar",
+    "jismoniy tarbiya": "Tabiiy fanlar",
+    "matematika": "Aniq fanlar",
+    "geometriya": "Aniq fanlar",
+    "algebra": "Aniq fanlar",
+    "informatika": "Aniq fanlar",
+    "tarix": "Ijtimoiy fanlar",
+    "huquq": "Ijtimoiy fanlar",
+    "iqtisod": "Ijtimoiy fanlar",
+    "chizmachilik": "Amaliy fanlar",
+    "tasviriy san'at": "Amaliy fanlar",
+    "rasm": "Amaliy fanlar",
+    "mehnat ta'limi": "Amaliy fanlar",
+    "mehnat talimi": "Amaliy fanlar",
+    "ingliz tili": "Gumanitar fanlar",
+    "rus tili": "Gumanitar fanlar",
+    "nemis tili": "Gumanitar fanlar",
+    "fransuz tili": "Gumanitar fanlar",
+    "tojik tili": "Gumanitar fanlar",
+    "koreys tili": "Gumanitar fanlar",
+    "ona tili": "Gumanitar fanlar",
+    "adabiyot": "Gumanitar fanlar",
+}
+
+
+def get_birlashma_for_fan(fan: str):
+    if not fan:
+        return None
+    fan_lower = fan.strip().lower()
+    for key, birlashma in FAN_TO_BIRLASHMA.items():
+        if key in fan_lower:
+            return birlashma
+    return None
+
+
 def _get_role_sync(user_id: int):
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
@@ -834,6 +872,8 @@ def _get_role_sync(user_id: int):
                 sinf = str(row.get("Sinf", "")).strip()
                 metod_birlashma = str(row.get("Metod Birlashma", "")).strip()
                 fan = str(row.get("Fan", "")).strip()
+                if not metod_birlashma and fan:
+                    metod_birlashma = get_birlashma_for_fan(fan) or ""
                 return {
                     "role": str(row.get("Rol", "")).strip().lower(),
                     "maktab": str(row.get("Maktab", "")).strip(),
@@ -909,9 +949,11 @@ def _get_birlashma_fanlar_sync(maktab: str, metod_birlashma: str):
     fanlar = set()
     for row in sheet.get_all_records():
         row_maktab = str(row.get("Maktab", "")).strip()
-        row_birlashma = str(row.get("Metod Birlashma", "")).strip().lower()
         row_fan = str(row.get("Fan", "")).strip()
-        if row_maktab == maktab and row_birlashma == birlashma_lower and row_fan:
+        row_birlashma = str(row.get("Metod Birlashma", "")).strip()
+        if not row_birlashma and row_fan:
+            row_birlashma = get_birlashma_for_fan(row_fan) or ""
+        if row_maktab == maktab and row_birlashma.strip().lower() == birlashma_lower and row_fan:
             fanlar.add(row_fan)
     return list(fanlar)
 
@@ -1598,7 +1640,8 @@ async def process_time_pref(message: types.Message, state: FSMContext):
         f"+998 94 041 42 55\n+998 93 101 58 70"
     )
 
-    is_medical = any("Tibbiyot" in course for course in selected_courses)
+    shifokorlik_fanlari = COURSE_CATEGORIES.get("🩺 Shifokorlik yo'nalishi (5 ta fan bir joyda)", [])
+    is_medical = any(course in shifokorlik_fanlari for course in selected_courses)
     if is_medical:
         try:
             photo = FSInputFile("IMG_20260619_235730_628.jpg")
