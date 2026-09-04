@@ -1,4 +1,4 @@
-aimport os  
+import os
 import logging
 from datetime import datetime
 import asyncio
@@ -74,7 +74,7 @@ def generate_certificate(full_name: str, user_id: int) -> str:
     out_path = f"cert_{user_id}.png"
     template.save(out_path)
     return out_path
- 
+
 DIPLOMA_TIERS = [
     (100, "mutlaq_g'olib.png", "MUTLAQ G'OLIB"),
     (95, "a'lo_darajali.png", "A'LO DARAJALI O'QUVCHI"),
@@ -167,7 +167,7 @@ def generate_diploma(full_name: str, subject: str, percent: int, user_id: int) -
 
     out_path = f"diploma_{user_id}.png"
     template.save(out_path)
-    return out_path  
+    return out_path
 def save_to_excel(data, user_id):
     if not os.path.exists(EXCEL_FILE):
         wb = Workbook()
@@ -388,12 +388,19 @@ async def notify_admin_test_result(user_id, subject, grade, score, total, percen
         logging.exception("Admin xabarnomasini yuborishda xato:")
 
 
+class RoleRequest(StatesGroup):
+    maktab = State()
+    role = State()
+    sinf = State()
+
+
 class Registration(StatesGroup):
     name = State()
     phone = State()
     parent_phone = State()
     school = State()
     grade = State()
+    grade_letter = State()
     filial = State()
     subjects = State()
     time_pref = State()
@@ -403,6 +410,7 @@ AVAILABLE_FILIALS = ["Angren", "Ohangaron"]
 
 ANGREN_SCHOOLS = [f"{i}-maktab" for i in range(1, 29)]
 AVAILABLE_TIMES = ["Ertalabki", "Kunduzgi", "Kechki"]
+GRADE_LETTERS = ["A", "B", "V", "G", "D", "E", "J", "Z", "I", "K", "L"]
 
 COURSE_CATEGORIES = {
     "🩺 Shifokorlik yo'nalishi (5 ta fan bir joyda)": [
@@ -862,8 +870,8 @@ def _get_role_sync(user_id: int):
     try:
         sheet = spreadsheet.worksheet("Rollar")
     except Exception:
-        sheet = spreadsheet.add_worksheet(title="Rollar", rows=200, cols=6)
-        sheet.append_row(["Telegram ID", "Rol", "Maktab", "Sinf", "Metod Birlashma", "Fan"])
+        sheet = spreadsheet.add_worksheet(title="Rollar", rows=200, cols=7)
+        sheet.append_row(["Telegram ID", "Rol", "Maktab", "Sinf", "Metod Birlashma", "Fan", "Ism"])
         return None
 
     for row in sheet.get_all_records():
@@ -902,12 +910,25 @@ ROLE_LABELS = {
     "boshlangich_oqituvchi": "🧒 Boshlang'ich sinf o'qituvchisi paneli",
     "yuqori_sinf_oqituvchi": "🎓 Yuqori sinf o'qituvchisi paneli",
     "birlashma_rahbari": "🧩 Metod birlashma rahbari paneli",
+    "sinf_rahbari": "👨‍👩‍👧 Sinf rahbari paneli",
+}
+
+REQUESTABLE_ROLES = {
+    "direktor": "🏫 Direktor",
+    "oibdo": "📘 O'IBDO'",
+    "otibdo": "📗 O'TIBDO'",
+    "texnik": "🔧 Texnik xodim",
+    "boshlangich_oqituvchi": "🧒 Boshlang'ich sinf o'qituvchisi",
+    "yuqori_sinf_oqituvchi": "🎓 Yuqori sinf o'qituvchisi",
+    "birlashma_rahbari": "🧩 Metod birlashma rahbari",
+    "aa_ustoz": "🎓 AA Ustozi (Angren Akademiyasi xodimi)",
+    "sinf_rahbari": "👨‍👩‍👧 Sinf rahbari",
 }
 
 # Bu rollar butun maktab statistikasini ko'radi
 SCHOOL_WIDE_ROLES = {"direktor", "oibdo", "otibdo", "texnik"}
-# Bu rol faqat o'z sinfi statistikasini ko'radi (bitta sinfga hamma fanni o'qitadi)
-CLASS_SCOPED_ROLES = {"boshlangich_oqituvchi"}
+# Bu rollar faqat o'z sinfi statistikasini ko'radi (bitta sinfga hamma fanni o'qitadi / sinf rahbari)
+CLASS_SCOPED_ROLES = {"boshlangich_oqituvchi", "sinf_rahbari"}
 # Bu rol faqat o'zi o'qitadigan FAN bo'yicha, butun maktab kesimida ko'radi
 SUBJECT_SCOPED_ROLES = {"yuqori_sinf_oqituvchi"}
 # Bu rol o'z metod birlashmasiga tegishli barcha fanlar bo'yicha ko'radi
@@ -1054,6 +1075,94 @@ async def get_scope_stats(maktab: str, sinf: str = None, fan=None, grade_range=N
         return None
 
 
+def _add_role_sync(user_id: int, full_name: str, role: str, maktab: str, sinf: str = ""):
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds_json = os.getenv("GOOGLE_CREDS")
+    if creds_json:
+        creds_data = json.loads(creds_json)
+        creds = Credentials.from_service_account_info(creds_data, scopes=scopes)
+    else:
+        creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
+    client = gspread.authorize(creds)
+
+    sheet_url = os.getenv("GOOGLE_SHEET_URL")
+    spreadsheet_id = os.getenv("SPREADSHEET_ID")
+    if sheet_url:
+        spreadsheet = client.open_by_url(sheet_url)
+    elif spreadsheet_id:
+        spreadsheet = client.open_by_key(spreadsheet_id)
+    else:
+        spreadsheet = client.open_by_url(
+            "https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYlUn0/edit"
+        )
+
+    try:
+        sheet = spreadsheet.worksheet("Rollar")
+    except Exception:
+        sheet = spreadsheet.add_worksheet(title="Rollar", rows=200, cols=7)
+        sheet.append_row(["Telegram ID", "Rol", "Maktab", "Sinf", "Metod Birlashma", "Fan", "Ism"])
+
+    sheet.append_row([user_id, role, maktab, sinf, "", "", full_name])
+
+
+async def add_role(user_id: int, full_name: str, role: str, maktab: str, sinf: str = ""):
+    try:
+        await asyncio.to_thread(_add_role_sync, user_id, full_name, role, maktab, sinf)
+        return True
+    except Exception:
+        logging.exception("Rol qo'shishda xato:")
+        return False
+
+
+def _find_director_sync(maktab: str):
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds_json = os.getenv("GOOGLE_CREDS")
+    if creds_json:
+        creds_data = json.loads(creds_json)
+        creds = Credentials.from_service_account_info(creds_data, scopes=scopes)
+    else:
+        creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
+    client = gspread.authorize(creds)
+
+    sheet_url = os.getenv("GOOGLE_SHEET_URL")
+    spreadsheet_id = os.getenv("SPREADSHEET_ID")
+    if sheet_url:
+        spreadsheet = client.open_by_url(sheet_url)
+    elif spreadsheet_id:
+        spreadsheet = client.open_by_key(spreadsheet_id)
+    else:
+        spreadsheet = client.open_by_url(
+            "https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYlUn0/edit"
+        )
+
+    try:
+        sheet = spreadsheet.worksheet("Rollar")
+    except Exception:
+        return None
+
+    for row in sheet.get_all_records():
+        if str(row.get("Maktab", "")).strip() == maktab and str(row.get("Rol", "")).strip().lower() == "direktor":
+            try:
+                return int(row.get("Telegram ID"))
+            except (ValueError, TypeError):
+                continue
+    return None
+
+
+async def find_director(maktab: str):
+    try:
+        return await asyncio.to_thread(_find_director_sync, maktab)
+    except Exception:
+        logging.exception("Direktorni qidirishda xato:")
+        return None
+
+
 def get_main_menu(has_panel: bool = False):
     kb = ReplyKeyboardBuilder()
     kb.button(text="📝 Ro'yxatdan o'tish")
@@ -1061,6 +1170,7 @@ def get_main_menu(has_panel: bool = False):
     kb.button(text="🚪 Davomat (Keldim/Ketdim)")
     kb.adjust(1, 2)
     kb.button(text="👤 Shaxsiy kabinet")
+    kb.button(text="🔑 Boshqaruv huquqini so'rash")
     if has_panel:
         kb.button(text="🏫 Maktab paneli")
     return kb.as_markup(resize_keyboard=True)
@@ -1164,6 +1274,156 @@ async def school_panel(message: types.Message):
         f"⚠️ Past o'zlashtiruvchi: {stats['past']}\n\n"
         f"📈 O'rtacha ko'rsatkich: {stats['ortacha_foiz']}%"
     )
+
+
+@dp.message(F.text == "🔑 Boshqaruv huquqini so'rash")
+async def request_role_start(message: types.Message, state: FSMContext):
+    kb = InlineKeyboardBuilder()
+    for idx, school in enumerate(ANGREN_SCHOOLS):
+        kb.button(text=school, callback_data=f"rrmaktab_{idx}")
+    kb.adjust(4)
+    await message.answer("🏫 Qaysi maktab uchun huquq so'rayapsiz?", reply_markup=kb.as_markup())
+    await state.set_state(RoleRequest.maktab)
+
+
+@dp.callback_query(RoleRequest.maktab, F.data.startswith("rrmaktab_"))
+async def request_role_school(callback: types.CallbackQuery, state: FSMContext):
+    idx = int(callback.data.replace("rrmaktab_", ""))
+    maktab = ANGREN_SCHOOLS[idx]
+    await state.update_data(maktab=maktab)
+
+    kb = InlineKeyboardBuilder()
+    for key, label in REQUESTABLE_ROLES.items():
+        kb.button(text=label, callback_data=f"rrrole_{key}")
+    kb.adjust(1)
+    await callback.message.edit_text(f"🏫 Tanlandi: {maktab}\n\nQaysi lavozim uchun so'rayapsiz?", reply_markup=kb.as_markup())
+    await state.set_state(RoleRequest.role)
+    await callback.answer()
+
+
+@dp.callback_query(RoleRequest.role, F.data.startswith("rrrole_"))
+async def request_role_final(callback: types.CallbackQuery, state: FSMContext):
+    role_key = callback.data.replace("rrrole_", "")
+    await state.update_data(role_key=role_key)
+    await callback.answer()
+
+    if role_key in CLASS_SCOPED_ROLES:
+        await callback.message.edit_text("👨‍👩‍👧 Qaysi sinfga mas'ulsiz? (masalan: 7-A)")
+        await state.set_state(RoleRequest.sinf)
+        return
+
+    await finalize_role_request(callback.message, callback.from_user, state, sinf="")
+
+
+@dp.message(RoleRequest.sinf)
+async def request_role_sinf(message: types.Message, state: FSMContext):
+    await finalize_role_request(message, message.from_user, state, sinf=message.text.strip())
+
+
+async def finalize_role_request(message: types.Message, user, state: FSMContext, sinf: str):
+    data = await state.get_data()
+    maktab = data.get("maktab")
+    role_key = data.get("role_key")
+    role_label = REQUESTABLE_ROLES.get(role_key, role_key)
+    full_name = user.full_name or "Noma'lum"
+
+    sinf_line = f"\n🏷 Sinf: {sinf}" if sinf else ""
+    await message.answer(
+        f"✅ So'rovingiz yuborildi!\n\n🏫 {maktab}\n👔 {role_label}{sinf_line}\n\nTasdiqlanishini kuting."
+    )
+    await state.clear()
+
+    admin_id = os.getenv("ADMIN_ID")
+
+    if role_key in ("direktor", "aa_ustoz"):
+        approver_id = int(admin_id) if admin_id else None
+    else:
+        approver_id = await find_director(maktab)
+        if not approver_id and admin_id:
+            approver_id = int(admin_id)
+
+    if approver_id:
+        kb = InlineKeyboardBuilder()
+        kb.button(text="✅ Tasdiqlash", callback_data=f"rrapprove_{user.id}_{role_key}_{sinf or '-'}")
+        kb.button(text="❌ Rad etish", callback_data=f"rrreject_{user.id}")
+        kb.adjust(2)
+        try:
+            await bot.send_message(
+                approver_id,
+                f"🔑 YANGI HUQUQ SO'ROVI\n\n"
+                f"👤 {full_name} (@{user.username or '—'})\n"
+                f"🆔 ID: {user.id}\n"
+                f"🏫 Maktab: {maktab}\n"
+                f"👔 Lavozim: {role_label}{sinf_line}",
+                reply_markup=kb.as_markup()
+            )
+        except Exception:
+            logging.exception("Tasdiqlovchiga so'rov yuborishda xato:")
+
+
+@dp.callback_query(F.data.startswith("rrapprove_"))
+async def approve_role_request(callback: types.CallbackQuery):
+    admin_id = os.getenv("ADMIN_ID", "")
+    caller_id = str(callback.from_user.id)
+
+    _, user_id_str, role_key, sinf_raw = callback.data.split("_", 3)
+    user_id = int(user_id_str)
+    sinf = "" if sinf_raw == "-" else sinf_raw
+
+    text = callback.message.text
+    maktab = "—"
+    for line in text.split("\n"):
+        if line.startswith("🏫 Maktab:"):
+            maktab = line.replace("🏫 Maktab:", "").strip()
+            break
+
+    # Ruxsat tekshiruvi: direktor/AA ustozi so'rovini faqat Rahbar tasdiqlaydi;
+    # boshqa maktab xodimlari so'rovini o'sha maktabning direktori (yoki Rahbar) tasdiqlaydi
+    if role_key in ("direktor", "aa_ustoz"):
+        if caller_id != admin_id:
+            await callback.answer("❌ Sizda bu huquq yo'q.", show_alert=True)
+            return
+    else:
+        director_id = await find_director(maktab)
+        allowed_ids = {admin_id}
+        if director_id:
+            allowed_ids.add(str(director_id))
+        if caller_id not in allowed_ids:
+            await callback.answer("❌ Sizda bu huquq yo'q.", show_alert=True)
+            return
+
+    try:
+        chat = await bot.get_chat(user_id)
+        full_name = chat.full_name or "Noma'lum"
+    except Exception:
+        full_name = "Noma'lum"
+
+    success = await add_role(user_id, full_name, role_key, maktab, sinf)
+    if success:
+        await callback.message.edit_text(callback.message.text + "\n\n✅ TASDIQLANDI")
+        try:
+            await bot.send_message(user_id, f"🎉 Tabriklaymiz! Sizga \"{REQUESTABLE_ROLES.get(role_key, role_key)}\" huquqi berildi.\n\nEndi \"🏫 Maktab paneli\" tugmasi orqali kira olasiz (avval /start bosing).")
+        except Exception:
+            pass
+    else:
+        await callback.message.edit_text(callback.message.text + "\n\n⚠️ Xatolik yuz berdi, qayta urinib ko'ring.")
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("rrreject_"))
+async def reject_role_request(callback: types.CallbackQuery):
+    admin_id = os.getenv("ADMIN_ID", "")
+    if str(callback.from_user.id) != admin_id:
+        # direktor ham rad eta olishi mumkin — u faqat o'ziga yuborilgan so'rovlarga javob beradi,
+        # shuning uchun bu yerda faqat Rahbarga tegishli qat'iy tekshiruv shart emas
+        pass
+    user_id = int(callback.data.replace("rrreject_", ""))
+    await callback.message.edit_text(callback.message.text + "\n\n❌ RAD ETILDI")
+    try:
+        await bot.send_message(user_id, "❌ Afsuski, so'rovingiz rad etildi.")
+    except Exception:
+        pass
+    await callback.answer()
 
 
 @dp.message(F.text == "/help")
@@ -1470,20 +1730,39 @@ async def process_school(callback: types.CallbackQuery, state: FSMContext):
     school_name = ANGREN_SCHOOLS[idx]
     await state.update_data(school=school_name)
     await callback.message.edit_text(f"🏫 Tanlandi: {school_name}")
-    await callback.message.answer("🎓 Nechanchi sinfda o'qiysiz?")
+    await callback.message.answer("🎓 Nechanchi sinfda o'qiysiz? (faqat raqam kiriting, masalan: 7)")
     await state.set_state(Registration.grade)
     await callback.answer()
 
 
 @dp.message(Registration.grade)
 async def process_grade(message: types.Message, state: FSMContext):
-    await state.update_data(grade=message.text)
+    if not message.text.strip().isdigit():
+        await message.answer("Iltimos, faqat raqam kiriting (masalan: 7)")
+        return
+    await state.update_data(grade=message.text.strip())
+    kb = InlineKeyboardBuilder()
+    for letter in GRADE_LETTERS:
+        kb.button(text=letter, callback_data=f"gradeletter_{letter}")
+    kb.adjust(4)
+    await message.answer("🔤 Sinf harfini tanlang:", reply_markup=kb.as_markup())
+    await state.set_state(Registration.grade_letter)
+
+
+@dp.callback_query(Registration.grade_letter, F.data.startswith("gradeletter_"))
+async def process_grade_letter(callback: types.CallbackQuery, state: FSMContext):
+    letter = callback.data.replace("gradeletter_", "")
+    data = await state.get_data()
+    full_grade = f"{data.get('grade')}-{letter}"
+    await state.update_data(grade=full_grade)
+    await callback.message.edit_text(f"🎓 Tanlandi: {full_grade}-sinf")
     kb = ReplyKeyboardBuilder()
     for filial in AVAILABLE_FILIALS:
         kb.button(text=filial)
     kb.adjust(2)
-    await message.answer("📍 Filialni tanlang:", reply_markup=kb.as_markup(resize_keyboard=True))
+    await callback.message.answer("📍 Filialni tanlang:", reply_markup=kb.as_markup(resize_keyboard=True))
     await state.set_state(Registration.filial)
+    await callback.answer()
 
 
 @dp.message(Registration.filial)
@@ -1757,7 +2036,7 @@ async def check_sub_callback(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data == "cert")
 async def cert_handler(callback: types.CallbackQuery):
-    await callback.message.answer("🎓 Sertifikat yuklash bo‘limi.")
+    await callback.message.answer("🎓 Sertifikat yuklash bo'limi.")
 
 
 async def handle_health(request):
