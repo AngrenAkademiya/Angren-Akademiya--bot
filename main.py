@@ -1,6 +1,7 @@
 import os
 import logging
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import asyncio
 import json
 import random
@@ -12,7 +13,7 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
 from aiohttp import web, ClientSession
 import openpyxl
 from openpyxl import Workbook
-from openpyxl.styles import Alignment
+from openpyxl.styles import Alignment, PatternFill
 from openpyxl.worksheet.page import PageMargins
 from aiogram.types import FSInputFile
 import gspread
@@ -20,6 +21,13 @@ from google.oauth2.service_account import Credentials
 from PIL import Image, ImageDraw, ImageFont
 import qrcode
 logging.basicConfig(level=logging.INFO)
+
+TASHKENT_TZ = ZoneInfo("Asia/Tashkent")
+
+
+def now_tashkent() -> datetime:
+    return datetime.now(TASHKENT_TZ)
+
 
 API_TOKEN = os.getenv("BOT_TOKEN")
 if not API_TOKEN:
@@ -60,7 +68,7 @@ def generate_certificate(full_name: str, user_id: int) -> str:
     y = 340  # 470 dan 520 ga tushirildi — chiziq ustiga to'g'ri kelishi uchun
     draw.text((x, y), text, font=font, fill=(255, 255, 255))
 
-    date_text = datetime.now().strftime("%d.%m.%Y")
+    date_text = now_tashkent().strftime("%d.%m.%Y")
     draw.text(
         (100, template.height - 60), f"Sana: {date_text}",
         font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24),
@@ -178,7 +186,7 @@ def save_to_excel(data, user_id):
 
     wb = openpyxl.load_workbook(EXCEL_FILE)
     ws = wb.active
-    sana = datetime.now().strftime("%d.%m.%Y %H:%M")
+    sana = now_tashkent().strftime("%d.%m.%Y %H:%M")
 
     courses_list = data.get("selected_courses", [])
     courses_string = "\n".join(f"• {c.replace(chr(10), ' ')}" for c in courses_list)
@@ -234,7 +242,7 @@ def save_to_excel(data, user_id):
 
 
 def _write_to_google_sheets_sync(data, user_id):
-    now = datetime.now()
+    now = now_tashkent()
     sana = now.strftime("%d.%m.%Y %H:%M")
     bugun = now.strftime("%d.%m.%Y")
 
@@ -347,7 +355,7 @@ def _write_test_result_sync(user_id, subject, grade, percent):
     student = find_student_by_id(user_id) or {}
     name = student.get("name") or "Noma'lum"
     school = student.get("school") or "—"
-    sana = datetime.now().strftime("%d.%m.%Y %H:%M")
+    sana = now_tashkent().strftime("%d.%m.%Y %H:%M")
     daraja = get_student_level(percent)
 
     sheet.append_row([sana, name, school, grade, subject, percent, daraja, user_id])
@@ -371,7 +379,7 @@ async def notify_admin_test_result(user_id, subject, grade, score, total, percen
         school = student.get("school") or "—"
         parent_phone = student.get("parent_phone") or "—"
         daraja = get_student_level(percent)
-        sana = datetime.now().strftime("%Y-%m-%d %H:%M")
+        sana = now_tashkent().strftime("%Y-%m-%d %H:%M")
 
         text = (
             f"📊 TEST NATIJASI HISOBOTI\n\n"
@@ -921,9 +929,13 @@ REQUESTABLE_ROLES = {
     "boshlangich_oqituvchi": "🧒 Boshlang'ich sinf o'qituvchisi",
     "yuqori_sinf_oqituvchi": "🎓 Yuqori sinf o'qituvchisi",
     "birlashma_rahbari": "🧩 Metod birlashma rahbari",
-    "aa_ustoz": "🎓 AA Ustozi (Angren Akademiyasi xodimi)",
     "sinf_rahbari": "👨‍👩‍👧 Sinf rahbari",
 }
+
+# AA (Angren Akademiyasi) o'z xodimlari uchun alohida — maktab tanlashsiz so'raladi
+AA_STAFF_ROLE_KEY = "aa_ustoz"
+AA_STAFF_ROLE_LABEL = "🎓 AA Ustozi (Angren Akademiyasi xodimi)"
+AA_STAFF_MAKTAB_NAME = "Angren Akademiyasi (markaziy)"
 
 # Bu rollar butun maktab statistikasini ko'radi
 SCHOOL_WIDE_ROLES = {"direktor", "oibdo", "otibdo", "texnik"}
@@ -1075,6 +1087,329 @@ async def get_scope_stats(maktab: str, sinf: str = None, fan=None, grade_range=N
         return None
 
 
+def _get_scope_rows_sync(maktab: str, sinf: str = None, fan=None, grade_range=None):
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds_json = os.getenv("GOOGLE_CREDS")
+    if creds_json:
+        creds_data = json.loads(creds_json)
+        creds = Credentials.from_service_account_info(creds_data, scopes=scopes)
+    else:
+        creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
+    client = gspread.authorize(creds)
+
+    sheet_url = os.getenv("GOOGLE_SHEET_URL")
+    spreadsheet_id = os.getenv("SPREADSHEET_ID")
+    if sheet_url:
+        spreadsheet = client.open_by_url(sheet_url)
+    elif spreadsheet_id:
+        spreadsheet = client.open_by_key(spreadsheet_id)
+    else:
+        spreadsheet = client.open_by_url(
+            "https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYlUn0/edit"
+        )
+
+    try:
+        sheet = spreadsheet.worksheet("Test Natijalari")
+    except Exception:
+        return []
+
+    rows = [r for r in sheet.get_all_records() if str(r.get("Maktab", "")).strip() == maktab]
+
+    if sinf:
+        rows = [r for r in rows if str(r.get("Sinf", "")).strip() == str(sinf).strip()]
+
+    if fan:
+        fan_list = [fan] if isinstance(fan, str) else list(fan)
+        fan_list_lower = [f.strip().lower() for f in fan_list if f]
+        rows = [
+            r for r in rows
+            if any(fl in str(r.get("Fan", "")).strip().lower() for fl in fan_list_lower)
+        ]
+
+    if grade_range:
+        min_g, max_g = grade_range
+        filtered = []
+        for r in rows:
+            try:
+                g = int(str(r.get("Sinf", "")).strip())
+                if min_g <= g <= max_g:
+                    filtered.append(r)
+            except (ValueError, TypeError):
+                continue
+        rows = filtered
+
+    return rows
+
+
+async def get_scope_rows(maktab: str, sinf: str = None, fan=None, grade_range=None):
+    try:
+        return await asyncio.to_thread(_get_scope_rows_sync, maktab, sinf, fan, grade_range)
+    except Exception:
+        logging.exception("Excel uchun qatorlarni olishda xato:")
+        return []
+
+
+def _get_all_test_rows_sync():
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds_json = os.getenv("GOOGLE_CREDS")
+    if creds_json:
+        creds_data = json.loads(creds_json)
+        creds = Credentials.from_service_account_info(creds_data, scopes=scopes)
+    else:
+        creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
+    client = gspread.authorize(creds)
+
+    sheet_url = os.getenv("GOOGLE_SHEET_URL")
+    spreadsheet_id = os.getenv("SPREADSHEET_ID")
+    if sheet_url:
+        spreadsheet = client.open_by_url(sheet_url)
+    elif spreadsheet_id:
+        spreadsheet = client.open_by_key(spreadsheet_id)
+    else:
+        spreadsheet = client.open_by_url(
+            "https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYlUn0/edit"
+        )
+
+    try:
+        sheet = spreadsheet.worksheet("Test Natijalari")
+    except Exception:
+        return []
+
+    return sheet.get_all_records()
+
+
+async def get_all_test_rows():
+    try:
+        return await asyncio.to_thread(_get_all_test_rows_sync)
+    except Exception:
+        logging.exception("Barcha test natijalarini olishda xato:")
+        return []
+
+
+DARAJA_FILL_COLORS = {
+    "🏆 Mutlaq a'lochi": "1E7B34",       # to'q yashil
+    "🥇 A'lochi o'quvchi": "8FD14F",     # och yashil
+    "🥈 Yaxshi bilimli": "2E75B6",       # ko'k
+    "🥉 O'rtacha bilimli": "9DC3E6",     # och ko'k
+    "⚠️ Past o'zlashtiruvchi": "FFD966",  # sariq
+}
+
+
+def build_scope_excel_sync(rows: list, title: str, out_path: str):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Natijalar"
+    headers = ["Sana", "O'quvchi", "Maktab", "Sinf", "Fan", "Natija (%)", "Daraja"]
+    ws.append(headers)
+
+    for r in rows:
+        daraja = str(r.get("Daraja", "")).strip()
+        row_values = [
+            r.get("Sana", ""),
+            r.get("O'quvchi", ""),
+            r.get("Maktab", ""),
+            r.get("Sinf", ""),
+            r.get("Fan", ""),
+            r.get("Natija (%)", ""),
+            daraja,
+        ]
+        ws.append(row_values)
+        fill_color = DARAJA_FILL_COLORS.get(daraja)
+        if fill_color:
+            fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
+            for col in range(1, len(headers) + 1):
+                ws.cell(row=ws.max_row, column=col).fill = fill
+
+    col_widths = {1: 16, 2: 24, 3: 14, 4: 8, 5: 20, 6: 12, 7: 22}
+    for col_num, width in col_widths.items():
+        ws.column_dimensions[openpyxl.utils.get_column_letter(col_num)].width = width
+
+    ws.freeze_panes = "A2"
+    wb.save(out_path)
+
+
+async def build_scope_excel(rows: list, title: str) -> str:
+    out_path = f"scope_export_{random.randint(100000, 999999)}.xlsx"
+    await asyncio.to_thread(build_scope_excel_sync, rows, title, out_path)
+    return out_path
+
+
+def _get_leader_overview_sync():
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds_json = os.getenv("GOOGLE_CREDS")
+    if creds_json:
+        creds_data = json.loads(creds_json)
+        creds = Credentials.from_service_account_info(creds_data, scopes=scopes)
+    else:
+        creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
+    client = gspread.authorize(creds)
+
+    sheet_url = os.getenv("GOOGLE_SHEET_URL")
+    spreadsheet_id = os.getenv("SPREADSHEET_ID")
+    if sheet_url:
+        spreadsheet = client.open_by_url(sheet_url)
+    elif spreadsheet_id:
+        spreadsheet = client.open_by_key(spreadsheet_id)
+    else:
+        spreadsheet = client.open_by_url(
+            "https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYlUn0/edit"
+        )
+
+    try:
+        sheet = spreadsheet.worksheet("Test Natijalari")
+    except Exception:
+        return {"jami": 0, "maktablar": {}}
+
+    rows = sheet.get_all_records()
+
+    per_school = {}
+    counts_total = {"🏆 Mutlaq a'lochi": 0, "🥇 A'lochi o'quvchi": 0, "🥈 Yaxshi bilimli": 0,
+                     "🥉 O'rtacha bilimli": 0, "⚠️ Past o'zlashtiruvchi": 0}
+    total_percent_sum = 0
+
+    for r in rows:
+        maktab = str(r.get("Maktab", "")).strip() or "Noma'lum"
+        daraja = str(r.get("Daraja", "")).strip()
+        try:
+            percent = float(r.get("Natija (%)", 0))
+        except (ValueError, TypeError):
+            percent = 0
+
+        if maktab not in per_school:
+            per_school[maktab] = {
+                "jami": 0,
+                "counts": {"🏆 Mutlaq a'lochi": 0, "🥇 A'lochi o'quvchi": 0, "🥈 Yaxshi bilimli": 0,
+                           "🥉 O'rtacha bilimli": 0, "⚠️ Past o'zlashtiruvchi": 0},
+                "percent_sum": 0
+            }
+
+        per_school[maktab]["jami"] += 1
+        per_school[maktab]["percent_sum"] += percent
+        if daraja in per_school[maktab]["counts"]:
+            per_school[maktab]["counts"][daraja] += 1
+
+        if daraja in counts_total:
+            counts_total[daraja] += 1
+        total_percent_sum += percent
+
+    jami = len(rows)
+    natija = {
+        "jami": jami,
+        "ortacha_foiz": round(total_percent_sum / jami, 1) if jami else 0,
+        "counts": counts_total,
+        "maktablar": {}
+    }
+    for maktab, data in per_school.items():
+        j = data["jami"]
+        natija["maktablar"][maktab] = {
+            "jami": j,
+            "ortacha_foiz": round(data["percent_sum"] / j, 1) if j else 0,
+            "counts": data["counts"]
+        }
+    return natija
+
+
+async def get_leader_overview():
+    try:
+        return await asyncio.to_thread(_get_leader_overview_sync)
+    except Exception:
+        logging.exception("Rahbar umumiy statistikasini olishda xato:")
+        return None
+
+
+def _get_subject_breakdown_sync(maktab: str, sinf: str = None):
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds_json = os.getenv("GOOGLE_CREDS")
+    if creds_json:
+        creds_data = json.loads(creds_json)
+        creds = Credentials.from_service_account_info(creds_data, scopes=scopes)
+    else:
+        creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
+    client = gspread.authorize(creds)
+
+    sheet_url = os.getenv("GOOGLE_SHEET_URL")
+    spreadsheet_id = os.getenv("SPREADSHEET_ID")
+    if sheet_url:
+        spreadsheet = client.open_by_url(sheet_url)
+    elif spreadsheet_id:
+        spreadsheet = client.open_by_key(spreadsheet_id)
+    else:
+        spreadsheet = client.open_by_url(
+            "https://docs.google.com/spreadsheets/d/1aXoL-TeP0Oh62u1kfgPyzyRsNjOdqGkovJmFutYlUn0/edit"
+        )
+
+    try:
+        results_sheet = spreadsheet.worksheet("Test Natijalari")
+        rows = results_sheet.get_all_records()
+    except Exception:
+        rows = []
+
+    rows = [r for r in rows if str(r.get("Maktab", "")).strip() == maktab]
+    if sinf:
+        rows = [r for r in rows if str(r.get("Sinf", "")).strip() == str(sinf).strip()]
+
+    by_fan = {}
+    for r in rows:
+        fan = str(r.get("Fan", "")).strip() or "Noma'lum fan"
+        try:
+            percent = float(r.get("Natija (%)", 0))
+        except (ValueError, TypeError):
+            percent = 0
+        if fan not in by_fan:
+            by_fan[fan] = {"jami": 0, "percent_sum": 0}
+        by_fan[fan]["jami"] += 1
+        by_fan[fan]["percent_sum"] += percent
+
+    # Rollar jadvalidan shu maktabdagi fan o'qituvchilarini topish
+    teacher_by_fan = {}
+    try:
+        roles_sheet = spreadsheet.worksheet("Rollar")
+        for row in roles_sheet.get_all_records():
+            row_maktab = str(row.get("Maktab", "")).strip()
+            row_role = str(row.get("Rol", "")).strip().lower()
+            row_fan = str(row.get("Fan", "")).strip()
+            row_name = str(row.get("Ism", "")).strip()
+            if row_maktab == maktab and row_role == "yuqori_sinf_oqituvchi" and row_fan:
+                teacher_by_fan.setdefault(row_fan.lower(), []).append(row_name or "Noma'lum")
+    except Exception:
+        pass
+
+    natija = []
+    for fan, data in by_fan.items():
+        j = data["jami"]
+        ortacha = round(data["percent_sum"] / j, 1) if j else 0
+        ustozlar = teacher_by_fan.get(fan.lower())
+        natija.append({
+            "fan": fan,
+            "jami": j,
+            "ortacha_foiz": ortacha,
+            "ustoz": ", ".join(ustozlar) if ustozlar else None
+        })
+
+    natija.sort(key=lambda x: x["ortacha_foiz"], reverse=True)
+    return natija
+
+
+async def get_subject_breakdown(maktab: str, sinf: str = None):
+    try:
+        return await asyncio.to_thread(_get_subject_breakdown_sync, maktab, sinf)
+    except Exception:
+        logging.exception("Fanlar kesimidagi statistikani olishda xato:")
+        return []
+
+
 def _add_role_sync(user_id: int, full_name: str, role: str, maktab: str, sinf: str = ""):
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
@@ -1163,7 +1498,7 @@ async def find_director(maktab: str):
         return None
 
 
-def get_main_menu(has_panel: bool = False):
+def get_main_menu(has_panel: bool = False, is_leader: bool = False):
     kb = ReplyKeyboardBuilder()
     kb.button(text="📝 Ro'yxatdan o'tish")
     kb.button(text="📈 Bilim darajasini tekshirish")
@@ -1171,9 +1506,17 @@ def get_main_menu(has_panel: bool = False):
     kb.adjust(1, 2)
     kb.button(text="👤 Shaxsiy kabinet")
     kb.button(text="🔑 Boshqaruv huquqini so'rash")
+    kb.button(text="🎓 AA Ustozi sifatida so'rash")
     if has_panel:
         kb.button(text="🏫 Maktab paneli")
+    if is_leader:
+        kb.button(text="👑 Rahbar paneli")
     return kb.as_markup(resize_keyboard=True)
+
+
+def _is_leader(user_id: int) -> bool:
+    admin_id = os.getenv("ADMIN_ID", "")
+    return admin_id != "" and str(user_id) == admin_id
 
 
 @dp.message(F.text == "/start")
@@ -1187,11 +1530,93 @@ async def cmd_start(message: types.Message, state: FSMContext):
         return
     role_info = await get_user_role(message.from_user.id)
     has_panel = bool(role_info and role_info.get("role") in ROLE_LABELS)
+    is_leader = _is_leader(message.from_user.id)
     await message.answer(
         "✨ Angren Akademiyasi rasmiy botiga xush kelibsiz!\n\n"
         "Kelajak akademiyasida o'z bilimingizni va farzandingiz kamolotini nazorat qiling.",
-        reply_markup=get_main_menu(has_panel)
+        reply_markup=get_main_menu(has_panel, is_leader)
     )
+
+
+@dp.message(F.text == "👑 Rahbar paneli")
+async def leader_panel(message: types.Message):
+    if not _is_leader(message.from_user.id):
+        await message.answer("❌ Sizda bu bo'limga kirish huquqi yo'q.")
+        return
+
+    overview = await get_leader_overview()
+    if overview is None:
+        await message.answer("⚠️ Statistikani yuklab bo'lmadi, keyinroq urinib ko'ring.")
+        return
+
+    if overview["jami"] == 0:
+        await message.answer("👑 Rahbar paneli\n\nHozircha hech qanday maktabda test natijalari mavjud emas.")
+        return
+
+    c = overview["counts"]
+    mutlaq_alochi = c.get("🏆 Mutlaq a'lochi", 0)
+    alochi = c.get("🥇 A'lochi o'quvchi", 0)
+    yaxshi = c.get("🥈 Yaxshi bilimli", 0)
+    ortacha = c.get("🥉 O'rtacha bilimli", 0)
+    past = c.get("⚠️ Past o'zlashtiruvchi", 0)
+
+    lines = [
+        "👑 Rahbar paneli — barcha maktablar bo'yicha umumiy hisobot",
+        "",
+        f"📊 Jami test natijalari: {overview['jami']} ta",
+        f"📈 Umumiy o'rtacha ko'rsatkich: {overview['ortacha_foiz']}%",
+        "",
+        f"🏆 Mutlaq a'lochi: {mutlaq_alochi}",
+        f"🥇 A'lochi o'quvchi: {alochi}",
+        f"🥈 Yaxshi bilimli: {yaxshi}",
+        f"🥉 O'rtacha bilimli: {ortacha}",
+        f"⚠️ Past o'zlashtiruvchi: {past}",
+        "",
+        "🏫 Maktablar kesimida:",
+    ]
+
+    maktablar = overview["maktablar"]
+    for maktab in sorted(maktablar.keys(), key=lambda m: maktablar[m]["jami"], reverse=True):
+        m = maktablar[maktab]
+        lines.append(f"\n▫️ {maktab} — {m['jami']} ta natija, o'rtacha {m['ortacha_foiz']}%")
+
+    text = "\n".join(lines)
+    # Telegram xabar uzunligi cheklovi (4096) — kerak bo'lsa bo'lib yuboriladi
+    if len(text) <= 4000:
+        await message.answer(text)
+    else:
+        for i in range(0, len(text), 4000):
+            await message.answer(text[i:i + 4000])
+
+    kb = InlineKeyboardBuilder()
+    kb.button(text="📊 Excel hisobot (barcha maktablar)", callback_data="export_leader_excel")
+    await message.answer("To'liq ma'lumotni Excel fayl sifatida ham olishingiz mumkin:", reply_markup=kb.as_markup())
+
+
+@dp.callback_query(F.data == "export_leader_excel")
+async def export_leader_excel(callback: types.CallbackQuery):
+    if not _is_leader(callback.from_user.id):
+        await callback.answer("❌ Sizda bu huquq yo'q.", show_alert=True)
+        return
+
+    await callback.answer("⏳ Excel fayl tayyorlanmoqda...")
+
+    all_rows = await get_all_test_rows()
+
+    if not all_rows:
+        await callback.message.answer("⚠️ Hozircha eksport qilinadigan ma'lumot yo'q.")
+        return
+
+    out_path = await build_scope_excel(all_rows, "Barcha maktablar")
+    try:
+        excel_doc = FSInputFile(out_path)
+        await callback.message.answer_document(
+            document=excel_doc,
+            caption=f"👑 Barcha maktablar — {len(all_rows)} ta natija (rang: yashil=a'lochi, ko'k=o'rtacha, sariq=past)"
+        )
+    finally:
+        if os.path.exists(out_path):
+            os.remove(out_path)
 
 
 @dp.message(F.text == "🏫 Maktab paneli")
@@ -1275,6 +1700,78 @@ async def school_panel(message: types.Message):
         f"📈 O'rtacha ko'rsatkich: {stats['ortacha_foiz']}%"
     )
 
+    # Fanlar kesimida o'qituvchi samaradorligi — direktor uchun butun maktab,
+    # sinf rahbari uchun faqat o'z sinfi bo'yicha
+    if role in SCHOOL_WIDE_ROLES:
+        breakdown = await get_subject_breakdown(maktab, sinf=None)
+    elif role in CLASS_SCOPED_ROLES:
+        breakdown = await get_subject_breakdown(maktab, sinf=sinf)
+    else:
+        breakdown = []
+
+    if breakdown:
+        lines = ["📚 Fanlar kesimida o'rtacha natijalar:"]
+        for item in breakdown:
+            ustoz_line = f" — {item['ustoz']}" if item["ustoz"] else ""
+            lines.append(f"\n▫️ {item['fan']}{ustoz_line}\n   {item['jami']} ta natija, o'rtacha {item['ortacha_foiz']}%")
+        await message.answer("\n".join(lines))
+
+    kb = InlineKeyboardBuilder()
+    kb.button(text="📊 Excel hisobot", callback_data="export_school_excel")
+    await message.answer("Shu ma'lumotlarni Excel fayl sifatida ham olishingiz mumkin:", reply_markup=kb.as_markup())
+
+
+@dp.callback_query(F.data == "export_school_excel")
+async def export_school_excel(callback: types.CallbackQuery):
+    role_info = await get_user_role(callback.from_user.id)
+    role = role_info.get("role") if role_info else None
+    if not role_info or role not in ROLE_LABELS:
+        await callback.answer("❌ Sizda bu bo'limga kirish huquqi yo'q.", show_alert=True)
+        return
+
+    maktab = role_info["maktab"]
+    sinf = role_info.get("sinf")
+    fan = role_info.get("fan")
+    metod_birlashma = role_info.get("metod_birlashma")
+
+    filter_sinf = None
+    filter_fan = None
+    filter_grade_range = None
+
+    if role in CLASS_SCOPED_ROLES:
+        filter_sinf = sinf
+    elif role in SUBJECT_SCOPED_ROLES:
+        filter_fan = fan
+    elif role in BIRLASHMA_LEADER_ROLES:
+        if metod_birlashma and metod_birlashma.strip().lower() in BOSHLANGICH_TALIM_NOMLARI:
+            filter_grade_range = (1, 4)
+        elif metod_birlashma:
+            filter_fan = await get_birlashma_fanlar(maktab, metod_birlashma) or None
+
+    await callback.answer("⏳ Excel fayl tayyorlanmoqda...")
+
+    rows = await get_scope_rows(maktab, sinf=filter_sinf, fan=filter_fan, grade_range=filter_grade_range)
+    if not rows:
+        await callback.message.answer("⚠️ Hozircha eksport qilinadigan ma'lumot yo'q.")
+        return
+
+    out_path = await build_scope_excel(rows, maktab)
+    try:
+        excel_doc = FSInputFile(out_path)
+        await callback.message.answer_document(
+            document=excel_doc,
+            caption=f"📊 {maktab} — {len(rows)} ta natija (rang: yashil=a'lochi, ko'k=o'rtacha, sariq=past)"
+        )
+    finally:
+        if os.path.exists(out_path):
+            os.remove(out_path)
+
+
+def role_label_for(role_key: str) -> str:
+    if role_key == AA_STAFF_ROLE_KEY:
+        return AA_STAFF_ROLE_LABEL
+    return REQUESTABLE_ROLES.get(role_key, role_key)
+
 
 @dp.message(F.text == "🔑 Boshqaruv huquqini so'rash")
 async def request_role_start(message: types.Message, state: FSMContext):
@@ -1282,8 +1779,19 @@ async def request_role_start(message: types.Message, state: FSMContext):
     for idx, school in enumerate(ANGREN_SCHOOLS):
         kb.button(text=school, callback_data=f"rrmaktab_{idx}")
     kb.adjust(4)
-    await message.answer("🏫 Qaysi maktab uchun huquq so'rayapsiz?", reply_markup=kb.as_markup())
+    await message.answer(
+        "🏫 Qaysi maktab uchun huquq so'rayapsiz?\n\n"
+        "(Agar siz Angren Akademiyasi xodimi/ustozi bo'lsangiz, pastdagi \"🎓 AA Ustozi sifatida so'rash\" tugmasidan foydalaning.)",
+        reply_markup=kb.as_markup()
+    )
     await state.set_state(RoleRequest.maktab)
+
+
+@dp.message(F.text == "🎓 AA Ustozi sifatida so'rash")
+async def request_aa_staff_role(message: types.Message, state: FSMContext):
+    await state.clear()
+    await state.update_data(maktab=AA_STAFF_MAKTAB_NAME, role_key=AA_STAFF_ROLE_KEY)
+    await finalize_role_request(message, message.from_user, state, sinf="")
 
 
 @dp.callback_query(RoleRequest.maktab, F.data.startswith("rrmaktab_"))
@@ -1324,7 +1832,7 @@ async def finalize_role_request(message: types.Message, user, state: FSMContext,
     data = await state.get_data()
     maktab = data.get("maktab")
     role_key = data.get("role_key")
-    role_label = REQUESTABLE_ROLES.get(role_key, role_key)
+    role_label = role_label_for(role_key)
     full_name = user.full_name or "Noma'lum"
 
     sinf_line = f"\n🏷 Sinf: {sinf}" if sinf else ""
@@ -1335,7 +1843,7 @@ async def finalize_role_request(message: types.Message, user, state: FSMContext,
 
     admin_id = os.getenv("ADMIN_ID")
 
-    if role_key in ("direktor", "aa_ustoz"):
+    if role_key in ("direktor", AA_STAFF_ROLE_KEY):
         approver_id = int(admin_id) if admin_id else None
     else:
         approver_id = await find_director(maktab)
@@ -1379,7 +1887,7 @@ async def approve_role_request(callback: types.CallbackQuery):
 
     # Ruxsat tekshiruvi: direktor/AA ustozi so'rovini faqat Rahbar tasdiqlaydi;
     # boshqa maktab xodimlari so'rovini o'sha maktabning direktori (yoki Rahbar) tasdiqlaydi
-    if role_key in ("direktor", "aa_ustoz"):
+    if role_key in ("direktor", AA_STAFF_ROLE_KEY):
         if caller_id != admin_id:
             await callback.answer("❌ Sizda bu huquq yo'q.", show_alert=True)
             return
@@ -1402,7 +1910,7 @@ async def approve_role_request(callback: types.CallbackQuery):
     if success:
         await callback.message.edit_text(callback.message.text + "\n\n✅ TASDIQLANDI")
         try:
-            await bot.send_message(user_id, f"🎉 Tabriklaymiz! Sizga \"{REQUESTABLE_ROLES.get(role_key, role_key)}\" huquqi berildi.\n\nEndi \"🏫 Maktab paneli\" tugmasi orqali kira olasiz (avval /start bosing).")
+            await bot.send_message(user_id, f"🎉 Tabriklaymiz! Sizga \"{role_label_for(role_key)}\" huquqi berildi.\n\nEndi \"🏫 Maktab paneli\" tugmasi orqali kira olasiz (avval /start bosing).")
         except Exception:
             pass
     else:
@@ -1646,7 +2154,7 @@ async def attendance_menu(message: types.Message):
 @dp.callback_query(F.data.startswith("attendance_"))
 async def process_attendance(callback: types.CallbackQuery):
     action = callback.data.split("_")[1]
-    current_time = datetime.now().strftime("%H:%M")
+    current_time = now_tashkent().strftime("%H:%M")
 
     if action == "in":
         await callback.message.answer(
@@ -1899,7 +2407,7 @@ async def process_time_pref(message: types.Message, state: FSMContext):
             f"👨‍👩‍👦 Ota-ona: {user_data.get('parent_phone')}\n"
             f"🏫 Maktab: {user_data.get('school')}, Sinf: {user_data.get('grade')}\n"
             f"📍 Filial: {user_data.get('filial')} | Smena: {user_data.get('time_pref')}\n"
-            f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+            f"🕐 {now_tashkent().strftime('%d.%m.%Y %H:%M')}"
         )
         try:
             await bot.send_message(int(admin_id), admin_text)
@@ -1978,7 +2486,7 @@ async def process_time_pref(message: types.Message, state: FSMContext):
                 f"👤 {user_data.get('name')}\n"
                 f"📞 {user_data.get('phone')}\n"
                 f"📍 {user_data.get('filial')} | {user_data.get('time_pref')}\n"
-                f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+                f"🕐 {now_tashkent().strftime('%d.%m.%Y %H:%M')}"
             )
         except Exception:
             logging.exception("Kanalga xabar yuborishda xato:")
